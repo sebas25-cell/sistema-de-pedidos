@@ -1,0 +1,9 @@
+# Tarea única: crea las 7 bases de datos, las tablas, los usuarios de BD por servicio y los datos de demostración
+FROM python:3.12-slim
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY common ./common
+COPY setup_db.py schema.sql ./
+CMD ["python", "setup_db.py"]

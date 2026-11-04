@@ -1,0 +1,142 @@
+# Sistema de Pedidos para Restaurantes - Montería
+#   docker compose up --build -d          -> todo el sistema
+#   docker compose --profile tools up -d  -> además phpMyAdmin (http://localhost:8080)
+# Frontend: http://localhost:3000   Swagger unificado: http://localhost:8000/docs   RabbitMQ: http://localhost:15672
+name: pedidos-monteria
+
+x-servicio: &servicio
+  restart: unless-stopped
+  depends_on:
+    db-setup: {condition: service_completed_successfully}
+    rabbitmq: {condition: service_healthy}
+  networks: [red]
+  volumes: [logs:/app/logs]
+  healthcheck:
+    test: ["CMD", "python", "-c", "import os,urllib.request;urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ['PORT'],timeout=3)"]
+    interval: 10s
+    timeout: 5s
+    retries: 6
+    start_period: 10s
+
+x-entorno: &entorno
+  DB_HOST: mariadb
+  JWT_SECRET: ${JWT_SECRET:?defínelo en .env}
+  INTERNAL_KEY: ${INTERNAL_KEY:?defínelo en .env}
+  RABBITMQ_URL: amqp://${RABBITMQ_USER:-pedidos}:${RABBITMQ_PASS:?defínelo en .env}@rabbitmq:5672/%2F
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: ${LOG_FORMAT:-text}
+  LOG_DIR: /app/logs
+  USUARIOS_URL: http://usuarios:8001
+  RESTAURANTES_URL: http://restaurantes:8002
+  MENU_URL: http://menu:8003
+  PEDIDOS_URL: http://pedidos:8004
+  PAGOS_URL: http://pagos:8005
+  DOMICILIOS_URL: http://domicilios:8006
+  NOTIFICACIONES_URL: http://notificaciones:8007
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?defínelo en .env}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes: [mariadb-data:/var/lib/mysql]
+    networks: [red]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-pedidos}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:?defínelo en .env}
+    ports: ["15672:15672"]          # consola de administración
+    volumes: [rabbitmq-data:/var/lib/rabbitmq]
+    networks: [red]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+
+  db-setup:                          # crea bases, tablas, usuarios de BD por servicio y datos demo; luego termina
+    build: {context: ., dockerfile: Dockerfile.setup}
+    depends_on:
+      mariadb: {condition: service_healthy}
+    environment:
+      DB_HOST: mariadb
+      DB_USER: root
+      DB_PASS: ${DB_ROOT_PASSWORD}
+      SERVICE_DB_PASS: ${SERVICE_DB_PASS:?defínelo en .env}
+    networks: [red]
+    restart: "no"
+
+  usuarios:
+    <<: *servicio
+    build: {context: ., dockerfile: usuarios/Dockerfile}
+    environment: {<<: *entorno, PORT: "8001", DB_USER: svc_usuarios, DB_PASS: "${SERVICE_DB_PASS}"}
+  restaurantes:
+    <<: *servicio
+    build: {context: ., dockerfile: restaurantes/Dockerfile}
+    environment: {<<: *entorno, PORT: "8002", DB_USER: svc_restaurantes, DB_PASS: "${SERVICE_DB_PASS}"}
+  menu:
+    <<: *servicio
+    build: {context: ., dockerfile: menu/Dockerfile}
+    environment: {<<: *entorno, PORT: "8003", DB_USER: svc_menu, DB_PASS: "${SERVICE_DB_PASS}"}
+  pedidos:
+    <<: *servicio
+    build: {context: ., dockerfile: pedidos/Dockerfile}
+    environment: {<<: *entorno, PORT: "8004", DB_USER: svc_pedidos, DB_PASS: "${SERVICE_DB_PASS}"}
+  pagos:
+    <<: *servicio
+    build: {context: ., dockerfile: pagos/Dockerfile}
+    environment: {<<: *entorno, PORT: "8005", DB_USER: svc_pagos, DB_PASS: "${SERVICE_DB_PASS}"}
+  domicilios:
+    <<: *servicio
+    build: {context: ., dockerfile: domicilios/Dockerfile}
+    environment: {<<: *entorno, PORT: "8006", DB_USER: svc_domicilios, DB_PASS: "${SERVICE_DB_PASS}"}
+  notificaciones:
+    <<: *servicio
+    build: {context: ., dockerfile: notificaciones/Dockerfile}
+    environment: {<<: *entorno, PORT: "8007", DB_USER: svc_notificaciones, DB_PASS: "${SERVICE_DB_PASS}"}
+
+  gateway:                           # único punto de entrada de la API
+    <<: *servicio
+    build: {context: ., dockerfile: gateway/Dockerfile}
+    environment: {<<: *entorno, PORT: "8000"}
+    ports: ["8000:8000"]
+    depends_on:
+      usuarios: {condition: service_healthy}
+      restaurantes: {condition: service_healthy}
+      menu: {condition: service_healthy}
+      pedidos: {condition: service_healthy}
+      pagos: {condition: service_healthy}
+      domicilios: {condition: service_healthy}
+      notificaciones: {condition: service_healthy}
+
+  frontend:
+    build: {context: ./frontend}
+    restart: unless-stopped
+    ports: ["3000:80"]
+    depends_on: [gateway]
+    networks: [red]
+
+  phpmyadmin:
+    image: phpmyadmin:5
+    profiles: [tools]
+    environment: {PMA_HOST: mariadb}
+    ports: ["8080:80"]
+    depends_on: [mariadb]
+    networks: [red]
+
+networks:
+  red: {}
+volumes:
+  mariadb-data: {}
+  rabbitmq-data: {}
+  logs: {}
