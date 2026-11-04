@@ -1,0 +1,17 @@
+1) Idempotencia: el mismo evento enviado dos veces crea los avisos una sola vez
+  [OK]    primer envío crea 1 aviso, repetido crea 0
+2) Mensaje inválido va a la cola de mensajes fallidos (DLQ) y el consumidor sigue vivo
+  [OK]    DLQ pasó de 0 a 1 mensaje(s)
+  [OK]    después del mensaje inválido, un pedido nuevo sigue notificando
+3) RabbitMQ se cae: el pedido sigue funcionando (respaldo HTTP) y los avisos llegan
+  [OK]    pedido #21 creado con RabbitMQ caído (HTTP 201, 0.3s)
+  [OK]    el aviso del pedido llegó igual por el respaldo HTTP
+   1-03 18:56:48,987 WARNING pedidos        [b11b2ad55a47] RabbitMQ no disponible (AMQPConnectionError); se usa HTTP directo durante 15s | 2026-11-03 18:56:49,027 INFO    pedidos        [b11b2ad55a47] Evento pedido.estado_cambiado entregado por HTTP (id=d589869f)
+  [OK]    RabbitMQ vuelve y el consumidor se reconecta solo
+  [OK]    tras la recuperación los eventos vuelven a viajar por RabbitMQ
+4) El consumidor se cae: los eventos esperan en la cola durable y se entregan al volver
+  [OK]    pedido #23 creado con notificaciones caído (HTTP 201)
+   mensajes esperando en la cola: notificaciones	1
+  [OK]    al volver notificaciones, el aviso pendiente se entrega (no se perdió)
+
+RESULTADO: TODO OK

@@ -1,0 +1,882 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Servicio domicilios",
+    "description": "**Responsabilidad:** reparto. Cuando la cocina marca un pedido `LISTO` crea el domicilio y lo **asigna automáticamente** al repartidor *disponible* con menos entregas activas; si no hay ninguno, queda en la **bolsa** de pedidos por aceptar y se avisa a los repartidores. Mueve el domicilio `ASIGNADO → EN_RUTA → ENTREGADO` y refleja cada paso en el pedido.\n\n**Datos propios:** base `db_domicilios`, tabla `domicilios`. Para saber quién es repartidor y si está disponible consulta el servicio **usuarios** por su API (no lee su base de datos).\n\n**Eventos que publica:** `domicilio.asignado`, `domicilio.aceptado`, `domicilio.disponible`.",
+    "contact": {
+      "name": "Sistema de Pedidos para Restaurantes - Montería"
+    },
+    "version": "4.0.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Monitoreo"
+        ],
+        "summary": "Estado del servicio",
+        "description": "Devuelve 200 si el servicio y su base de datos responden, o 503 si algo falla. Lo usan los healthchecks de Docker y el panel de monitoreo.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Monitoreo"
+        ],
+        "summary": "Métricas del servicio (solo ADMIN)",
+        "description": "Peticiones, errores por clase, latencia media y p95, rutas más usadas, errores y avisos recientes.",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/domicilios": {
+      "get": {
+        "tags": [
+          "Domicilios"
+        ],
+        "summary": "Domicilios activos (ADMIN)",
+        "operationId": "activos_domicilios_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Uso interno"
+        ],
+        "summary": "Crear el domicilio de un pedido LISTO",
+        "description": "Idempotente. Elige un repartidor disponible; si no hay, el domicilio queda sin repartidor (`repartidor_id = null`) y publica `domicilio.disponible` para avisar a los repartidores.",
+        "operationId": "crear_domicilios_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DomicilioIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/domicilios/disponibles": {
+      "get": {
+        "tags": [
+          "Repartidor"
+        ],
+        "summary": "Pedidos listos por aceptar (REPARTIDOR)",
+        "description": "La bolsa: domicilios sin repartidor que un repartidor disponible puede aceptar.",
+        "operationId": "domicilios_disponibles_domicilios_disponibles_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/domicilios/{did}/aceptar": {
+      "patch": {
+        "tags": [
+          "Repartidor"
+        ],
+        "summary": "Aceptar un domicilio de la bolsa (REPARTIDOR)",
+        "description": "Exige estar disponible (se consulta al servicio de usuarios). La asignación es un `UPDATE` atómico: si dos repartidores aceptan a la vez, solo uno gana y el otro recibe 409.",
+        "operationId": "aceptar_domicilios__did__aceptar_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "did",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Did"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Un servicio del que depende esta operación no está disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/domicilios/pedido/{pedido_id}": {
+      "get": {
+        "tags": [
+          "Domicilios"
+        ],
+        "summary": "Domicilio de un pedido (ADMIN, REPARTIDOR)",
+        "description": "Un REPARTIDOR solo puede ver los domicilios que le pertenecen.",
+        "operationId": "por_pedido_domicilios_pedido__pedido_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pedido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pedido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Uso interno"
+        ],
+        "summary": "Liberar el domicilio de un pedido cancelado",
+        "description": "Solo lo usa el servicio de pedidos cuando se cancela un pedido ya asignado.",
+        "operationId": "eliminar_domicilios_pedido__pedido_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pedido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pedido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/domicilios/repartidor/{rid}": {
+      "get": {
+        "tags": [
+          "Domicilios"
+        ],
+        "summary": "Domicilios activos de un repartidor",
+        "description": "Un REPARTIDOR solo puede consultar los suyos.",
+        "operationId": "por_repartidor_domicilios_repartidor__rid__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/domicilios/{did}/asignar": {
+      "patch": {
+        "tags": [
+          "Domicilios"
+        ],
+        "summary": "Asignar o reasignar repartidor (ADMIN)",
+        "description": "Solo antes de que el domicilio salga a ruta.",
+        "operationId": "asignar_domicilios__did__asignar_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "did",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Did"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Asignacion"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/domicilios/{did}/avanzar": {
+      "patch": {
+        "tags": [
+          "Domicilios"
+        ],
+        "summary": "Avanzar el domicilio (REPARTIDOR dueño o ADMIN)",
+        "description": "`ASIGNADO → EN_RUTA` (el pedido pasa a `EN_CAMINO`) y `EN_RUTA → ENTREGADO` (el pedido pasa a `ENTREGADO`). Si el servicio de pedidos rechaza el cambio, se **deshace** el del domicilio para que ambos servicios sigan coherentes.",
+        "operationId": "avanzar_domicilios__did__avanzar_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "did",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Did"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Falló un servicio del que depende esta operación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Un servicio del que depende esta operación no está disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Asignacion": {
+        "properties": {
+          "repartidor_id": {
+            "type": "integer",
+            "title": "Repartidor Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "repartidor_id"
+        ],
+        "title": "Asignacion"
+      },
+      "DomicilioIn": {
+        "properties": {
+          "pedido_id": {
+            "type": "integer",
+            "title": "Pedido Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pedido_id"
+        ],
+        "title": "DomicilioIn",
+        "examples": [
+          {
+            "pedido_id": 1
+          }
+        ]
+      },
+      "Error": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "Error",
+        "description": "Formato de todas las respuestas de error del sistema."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "description": "Token JWT que entrega `POST /usuarios/login`. Pégalo sin la palabra 'Bearer'.",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Domicilios",
+      "description": "Consulta, asignación y avance del reparto."
+    },
+    {
+      "name": "Repartidor",
+      "description": "Pedidos por aceptar y aceptación (rol REPARTIDOR)."
+    },
+    {
+      "name": "Uso interno",
+      "description": "Operaciones que invoca el servicio de pedidos."
+    },
+    {
+      "name": "Monitoreo",
+      "description": "Salud y métricas del servicio."
+    }
+  ]
+}

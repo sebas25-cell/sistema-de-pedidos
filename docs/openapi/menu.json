@@ -1,0 +1,922 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Servicio menu",
+    "description": "**Responsabilidad:** productos de cada restaurante y su **inventario (stock)**. Expone el menú público, la gestión del ADMIN y las operaciones atómicas de stock que usa el servicio de pedidos.\n\n**Datos propios:** base `db_menu`, tabla `productos`. Para validar que un restaurante exista consulta el servicio **restaurantes** por su API (no comparte tablas).",
+    "contact": {
+      "name": "Sistema de Pedidos para Restaurantes - Montería"
+    },
+    "version": "4.0.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Monitoreo"
+        ],
+        "summary": "Estado del servicio",
+        "description": "Devuelve 200 si el servicio y su base de datos responden, o 503 si algo falla. Lo usan los healthchecks de Docker y el panel de monitoreo.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Monitoreo"
+        ],
+        "summary": "Métricas del servicio (solo ADMIN)",
+        "description": "Peticiones, errores por clase, latencia media y p95, rutas más usadas, errores y avisos recientes.",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/productos/restaurante/{rid}": {
+      "get": {
+        "tags": [
+          "Menú"
+        ],
+        "summary": "Menú de un restaurante",
+        "description": "Público. Solo productos activos (los ocultos no se muestran).",
+        "operationId": "menu_restaurante_productos_restaurante__rid__get",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProductoOut"
+                  },
+                  "title": "Response Menu Restaurante Productos Restaurante  Rid  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/productos/restaurante/{rid}": {
+      "get": {
+        "tags": [
+          "Administración"
+        ],
+        "summary": "Menú completo de un restaurante, con productos ocultos (ADMIN)",
+        "operationId": "menu_completo_admin_productos_restaurante__rid__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProductoOut"
+                  },
+                  "title": "Response Menu Completo Admin Productos Restaurante  Rid  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/productos/{pid}": {
+      "get": {
+        "tags": [
+          "Menú"
+        ],
+        "summary": "Consultar un producto",
+        "description": "Público. Incluye precio, stock y si está activo.",
+        "operationId": "producto_productos__pid__get",
+        "parameters": [
+          {
+            "name": "pid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductoOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Administración"
+        ],
+        "summary": "Actualizar un producto (ADMIN)",
+        "operationId": "actualizar_productos__pid__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductoUpd"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductoOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Administración"
+        ],
+        "summary": "Ocultar un producto (ADMIN)",
+        "description": "Baja lógica: deja de mostrarse pero se conserva en los pedidos anteriores.",
+        "operationId": "desactivar_productos__pid__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/productos": {
+      "post": {
+        "tags": [
+          "Administración"
+        ],
+        "summary": "Crear un producto (ADMIN)",
+        "description": "Valida por API que el restaurante exista.",
+        "operationId": "crear_productos_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductoIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductoOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Un servicio del que depende esta operación no está disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/productos/{pid}/reponer": {
+      "patch": {
+        "tags": [
+          "Administración"
+        ],
+        "summary": "Sumar stock",
+        "description": "Reposición manual del ADMIN, o devolución automática que hace el servicio de pedidos cuando se cancela un pedido.",
+        "operationId": "reponer_productos__pid__reponer_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Cantidad"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/productos/{pid}/descontar": {
+      "patch": {
+        "tags": [
+          "Uso interno"
+        ],
+        "summary": "Descontar stock (solo servicios internos)",
+        "description": "Atómico: `UPDATE ... WHERE stock >= cantidad`; si no alcanza responde 409 sin tocar nada. Solo acepta llamadas firmadas con la clave interna (servicio de pedidos).",
+        "operationId": "descontar_productos__pid__descontar_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Cantidad"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Cantidad": {
+        "properties": {
+          "cantidad": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Cantidad"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cantidad"
+        ],
+        "title": "Cantidad"
+      },
+      "Error": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "Error",
+        "description": "Formato de todas las respuestas de error del sistema."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ProductoIn": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Nombre"
+          },
+          "categoria": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoria"
+          },
+          "precio": {
+            "type": "number",
+            "exclusiveMaximum": 100000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Precio"
+          },
+          "stock": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Stock",
+            "default": 0
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo",
+            "default": true
+          },
+          "restaurante_id": {
+            "type": "integer",
+            "title": "Restaurante Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "precio",
+          "restaurante_id"
+        ],
+        "title": "ProductoIn",
+        "examples": [
+          {
+            "activo": true,
+            "categoria": "Hamburguesas",
+            "nombre": "Hamburguesa Clásica",
+            "precio": 18000,
+            "restaurante_id": 1,
+            "stock": 40
+          }
+        ]
+      },
+      "ProductoOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "restaurante_id": {
+            "type": "integer",
+            "title": "Restaurante Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "categoria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoria"
+          },
+          "precio": {
+            "type": "number",
+            "title": "Precio"
+          },
+          "stock": {
+            "type": "integer",
+            "title": "Stock"
+          },
+          "activo": {
+            "type": "integer",
+            "title": "Activo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "restaurante_id",
+          "nombre",
+          "precio",
+          "stock",
+          "activo"
+        ],
+        "title": "ProductoOut"
+      },
+      "ProductoUpd": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Nombre"
+          },
+          "categoria": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoria"
+          },
+          "precio": {
+            "type": "number",
+            "exclusiveMaximum": 100000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Precio"
+          },
+          "stock": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Stock",
+            "default": 0
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "precio"
+        ],
+        "title": "ProductoUpd"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "description": "Token JWT que entrega `POST /usuarios/login`. Pégalo sin la palabra 'Bearer'.",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Menú",
+      "description": "Consulta pública de productos."
+    },
+    {
+      "name": "Administración",
+      "description": "Gestión de productos y stock (solo ADMIN)."
+    },
+    {
+      "name": "Uso interno",
+      "description": "Operaciones de stock que invoca el servicio de pedidos."
+    },
+    {
+      "name": "Monitoreo",
+      "description": "Salud y métricas del servicio."
+    }
+  ]
+}

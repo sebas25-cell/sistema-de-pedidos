@@ -1,0 +1,640 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Servicio pagos",
+    "description": "**Responsabilidad:** registrar y controlar el pago de cada pedido. El **monto lo define el pedido** (se consulta al servicio de pedidos), nunca quien llama. TARJETA y NEQUI se aprueban de forma simulada y confirman el pedido; el EFECTIVO queda `PENDIENTE` y se cobra al entregar.\n\n**Datos propios:** base `db_pagos`, tabla `pagos`. Estados: `PENDIENTE`, `PAGADO`, `FALLIDO`, `REEMBOLSADO`.\n\nLas operaciones de creación, cobro y anulación son de **uso interno** (las invoca el servicio de pedidos).",
+    "contact": {
+      "name": "Sistema de Pedidos para Restaurantes - Montería"
+    },
+    "version": "4.0.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Monitoreo"
+        ],
+        "summary": "Estado del servicio",
+        "description": "Devuelve 200 si el servicio y su base de datos responden, o 503 si algo falla. Lo usan los healthchecks de Docker y el panel de monitoreo.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Monitoreo"
+        ],
+        "summary": "Métricas del servicio (solo ADMIN)",
+        "description": "Peticiones, errores por clase, latencia media y p95, rutas más usadas, errores y avisos recientes.",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/pagos": {
+      "post": {
+        "tags": [
+          "Uso interno"
+        ],
+        "summary": "Registrar el pago de un pedido",
+        "description": "Consulta el pedido por API, toma su total como monto y registra el pago. Es **idempotente**: si ya existe un pago vigente del pedido lo devuelve. Con TARJETA/NEQUI el pago queda `PAGADO` y pide al servicio de pedidos pasar a `CONFIRMADO`.",
+        "operationId": "crear_pago_pagos_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PagoIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagoOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Falló un servicio del que depende esta operación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Un servicio del que depende esta operación no está disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/pagos/pedido/{pedido_id}": {
+      "get": {
+        "tags": [
+          "Pagos"
+        ],
+        "summary": "Pagos de un pedido (ADMIN)",
+        "operationId": "pagos_de_pedido_pagos_pedido__pedido_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pedido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pedido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pagos/pedido/{pedido_id}/cobrar": {
+      "patch": {
+        "tags": [
+          "Uso interno"
+        ],
+        "summary": "Cobrar el efectivo al entregar",
+        "description": "El pago en efectivo `PENDIENTE` pasa a `PAGADO`. Lo invoca pedidos al marcar ENTREGADO.",
+        "operationId": "cobrar_pagos_pedido__pedido_id__cobrar_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pedido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pedido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pagos/pedido/{pedido_id}/anular": {
+      "patch": {
+        "tags": [
+          "Uso interno"
+        ],
+        "summary": "Anular el pago de un pedido cancelado",
+        "description": "Compensación: lo `PENDIENTE` queda `FALLIDO` y lo `PAGADO` queda `REEMBOLSADO` (simulado).",
+        "operationId": "anular_pagos_pedido__pedido_id__anular_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pedido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pedido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pagos/{pago_id}/estado": {
+      "patch": {
+        "tags": [
+          "Pagos"
+        ],
+        "summary": "Cambiar el estado de un pago (ADMIN)",
+        "operationId": "cambiar_estado_pagos__pago_id__estado_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pago_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pago Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CambioEstado"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagoOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CambioEstado": {
+        "properties": {
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "estado"
+        ],
+        "title": "CambioEstado"
+      },
+      "Error": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "Error",
+        "description": "Formato de todas las respuestas de error del sistema."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "PagoIn": {
+        "properties": {
+          "pedido_id": {
+            "type": "integer",
+            "title": "Pedido Id"
+          },
+          "metodo": {
+            "type": "string",
+            "title": "Metodo",
+            "description": "EFECTIVO, TARJETA o NEQUI"
+          },
+          "monto": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monto",
+            "description": "Opcional: si viene, debe coincidir con el total del pedido"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pedido_id",
+          "metodo"
+        ],
+        "title": "PagoIn",
+        "examples": [
+          {
+            "metodo": "TARJETA",
+            "pedido_id": 1
+          }
+        ]
+      },
+      "PagoOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "estado"
+        ],
+        "title": "PagoOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "description": "Token JWT que entrega `POST /usuarios/login`. Pégalo sin la palabra 'Bearer'.",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Pagos",
+      "description": "Consulta y gestión de pagos."
+    },
+    {
+      "name": "Uso interno",
+      "description": "Operaciones que invoca el servicio de pedidos."
+    },
+    {
+      "name": "Monitoreo",
+      "description": "Salud y métricas del servicio."
+    }
+  ]
+}

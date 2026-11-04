@@ -1,0 +1,12 @@
+flowchart LR
+  subgraph host["Docker Compose · red 'red'"]
+    FE["frontend (nginx) :3000"] --> GW["gateway :8000"]
+    GW --> SV["usuarios · restaurantes · menu<br/>pedidos · pagos · domicilios · notificaciones"]
+    SV --> DB[("mariadb :3306<br/>7 bases + 7 usuarios de BD")]
+    SV <--> MQ{{"rabbitmq :5672<br/>consola :15672"}}
+    SETUP["db-setup (tarea única)"] --> DB
+    PMA["phpMyAdmin :8080<br/>(perfil tools)"] -.-> DB
+    LOGS[("volumen logs")] -.- SV
+  end
+  U(("Usuario")) --> FE
+  U --> GW

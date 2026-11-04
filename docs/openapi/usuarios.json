@@ -1,0 +1,872 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Servicio usuarios",
+    "description": "**Responsabilidad:** identidad y acceso del sistema. Registra clientes, autentica a cualquier usuario y emite el **token JWT** que usan los demás servicios; administra el personal (admins y repartidores) y la **disponibilidad** de los repartidores.\n\n**Datos propios:** base `db_usuarios`, tabla `usuarios`. Ningún otro servicio accede a ella: los demás consultan este servicio por su API.\n\n**Roles:** `CLIENTE`, `REPARTIDOR`, `ADMIN`.",
+    "contact": {
+      "name": "Sistema de Pedidos para Restaurantes - Montería"
+    },
+    "version": "4.0.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Monitoreo"
+        ],
+        "summary": "Estado del servicio",
+        "description": "Devuelve 200 si el servicio y su base de datos responden, o 503 si algo falla. Lo usan los healthchecks de Docker y el panel de monitoreo.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Monitoreo"
+        ],
+        "summary": "Métricas del servicio (solo ADMIN)",
+        "description": "Peticiones, errores por clase, latencia media y p95, rutas más usadas, errores y avisos recientes.",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/registro": {
+      "post": {
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Registrar un cliente",
+        "description": "Registro público: siempre crea un usuario con rol `CLIENTE`. El personal lo crea un ADMIN con `POST /admin/usuarios`.",
+        "operationId": "registro_registro_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Registro"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/login": {
+      "post": {
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Iniciar sesión",
+        "description": "Valida correo y contraseña (bcrypt) y devuelve los datos del usuario con su **token JWT** (vigencia 12 h). Tras 5 intentos fallidos con el mismo correo se bloquea 15 minutos.",
+        "operationId": "login_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiados intentos, espera antes de reintentar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usuarios/{uid}": {
+      "get": {
+        "tags": [
+          "Usuarios"
+        ],
+        "summary": "Consultar un usuario",
+        "description": "Un CLIENTE o REPARTIDOR solo puede consultarse a sí mismo; un ADMIN, a cualquiera.",
+        "operationId": "get_usuario_usuarios__uid__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Uid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/repartidores": {
+      "get": {
+        "tags": [
+          "Repartidores"
+        ],
+        "summary": "Listar repartidores y su disponibilidad (ADMIN)",
+        "description": "Devuelve `id`, `nombre` y `disponible` de cada repartidor. Lo consume el servicio de domicilios para asignar pedidos (llamada interna).",
+        "operationId": "repartidores_repartidores_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/repartidores/yo": {
+      "get": {
+        "tags": [
+          "Repartidores"
+        ],
+        "summary": "Mi disponibilidad (REPARTIDOR)",
+        "operationId": "mi_disponibilidad_repartidores_yo_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/repartidores/disponibilidad": {
+      "patch": {
+        "tags": [
+          "Repartidores"
+        ],
+        "summary": "Activar o desactivar mi disponibilidad",
+        "description": "Solo los repartidores disponibles reciben asignación automática de pedidos y pueden aceptar pedidos de la bolsa.",
+        "operationId": "cambiar_disponibilidad_repartidores_disponibilidad_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Disponibilidad"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/admin/usuarios": {
+      "get": {
+        "tags": [
+          "Usuarios"
+        ],
+        "summary": "Listar usuarios (ADMIN)",
+        "operationId": "listar_usuarios_admin_usuarios_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UsuarioOut"
+                  },
+                  "type": "array",
+                  "title": "Response Listar Usuarios Admin Usuarios Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Usuarios"
+        ],
+        "summary": "Crear un usuario de cualquier rol (ADMIN)",
+        "description": "Es la forma de crear repartidores y otros administradores.",
+        "operationId": "crear_usuario_admin_usuarios_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NuevoUsuario"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Disponibilidad": {
+        "properties": {
+          "disponible": {
+            "type": "boolean",
+            "title": "Disponible"
+          }
+        },
+        "type": "object",
+        "required": [
+          "disponible"
+        ],
+        "title": "Disponibilidad"
+      },
+      "Error": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "Error",
+        "description": "Formato de todas las respuestas de error del sistema."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Login": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "Login",
+        "examples": [
+          {
+            "email": "cliente@monteria.com",
+            "password": "cliente123"
+          }
+        ]
+      },
+      "LoginOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "rol": {
+            "type": "string",
+            "title": "Rol"
+          },
+          "token": {
+            "type": "string",
+            "title": "Token",
+            "description": "JWT; enviarlo como `Authorization: Bearer <token>`"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "email",
+          "rol",
+          "token"
+        ],
+        "title": "LoginOut"
+      },
+      "NuevoUsuario": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 2,
+            "title": "Nombre"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 150,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 72,
+            "title": "Password",
+            "description": "Mínimo 6 caracteres"
+          },
+          "rol": {
+            "type": "string",
+            "title": "Rol",
+            "description": "CLIENTE, ADMIN o REPARTIDOR"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "email",
+          "password",
+          "rol"
+        ],
+        "title": "NuevoUsuario",
+        "examples": [
+          {
+            "email": "pedro@monteria.com",
+            "nombre": "Pedro Gómez",
+            "password": "reparto1",
+            "rol": "REPARTIDOR"
+          }
+        ]
+      },
+      "Registro": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 2,
+            "title": "Nombre"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 150,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 72,
+            "title": "Password",
+            "description": "Mínimo 6 caracteres"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "email",
+          "password"
+        ],
+        "title": "Registro",
+        "examples": [
+          {
+            "email": "ana@correo.com",
+            "nombre": "Ana Pérez",
+            "password": "secreto1"
+          }
+        ]
+      },
+      "UsuarioOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "rol": {
+            "type": "string",
+            "title": "Rol"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "email",
+          "rol"
+        ],
+        "title": "UsuarioOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "description": "Token JWT que entrega `POST /usuarios/login`. Pégalo sin la palabra 'Bearer'.",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Autenticación",
+      "description": "Registro público y login (devuelve el JWT)."
+    },
+    {
+      "name": "Usuarios",
+      "description": "Consulta de un usuario y administración del personal."
+    },
+    {
+      "name": "Repartidores",
+      "description": "Listado y disponibilidad de los repartidores."
+    },
+    {
+      "name": "Monitoreo",
+      "description": "Salud y métricas del servicio."
+    }
+  ]
+}

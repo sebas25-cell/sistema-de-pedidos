@@ -1,0 +1,119 @@
+
+== Servicios
+  [OK]   los 8 servicios responden
+
+== Seguridad
+  [OK]   sin token no se listan pedidos (401)
+  [OK]   token falso rechazado (401)
+  [OK]   login incorrecto (401)
+  [OK]   registro público crea cliente
+  [OK]   email repetido (409)
+  [OK]   login cliente y admin entregan token
+  [OK]   cliente NO puede crear restaurantes (403)
+  [OK]   cliente NO puede registrar pagos falsos (403)
+  [OK]   cliente NO puede cambiar estados (403)
+  [OK]   cliente NO ve usuarios (403)
+  [OK]   X-Internal-Key falsa no abre nada
+
+== Gestión de restaurantes y menú (admin)
+  [OK]   crear restaurante
+  [OK]   crear productos
+  [OK]   precio inválido rechazado (422)
+  [OK]   editar producto
+  [OK]   el menú público muestra los productos
+  [OK]   reponer stock
+
+== Pedidos y pagos
+  [OK]   pedido con tarjeta se crea
+  [OK]   total calculado por el servidor (2x10000 + 3000)
+  [OK]   pago con tarjeta confirma el pedido
+  [OK]   stock descontado
+  [OK]   notificaciones: recibido y confirmado
+  [OK]   el cliente no puede falsificar el precio (se ignora)
+  [OK]   sin stock suficiente (409)
+  [OK]   el stock del producto válido se devolvió (sin descuentos huérfanos)
+  [OK]   producto de otro restaurante rechazado (400)
+  [OK]   dirección vacía rechazada (400)
+  [OK]   pedido en efectivo queda CREADO y suma ítems repetidos
+  [OK]   pago en efectivo PENDIENTE con el monto del pedido
+
+== Cancelación
+  [OK]   cliente cancela su pedido
+  [OK]   stock devuelto al cancelar
+  [OK]   pago del pedido cancelado queda FALLIDO
+  [OK]   no se puede cancelar dos veces (409)
+  [OK]   un pedido cancelado no avanza (409)
+  [OK]   otro cliente no ve ni cancela pedidos ajenos (403)
+  [OK]   el listado del cliente solo incluye lo suyo
+  [OK]   no puede leer notificaciones de otro (403)
+
+== Disponibilidad del repartidor y pedidos por aceptar
+  [OK]   el repartidor activa y desactiva su disponibilidad
+  [OK]   un cliente no puede cambiar disponibilidad (403)
+  [OK]   el admin ve la disponibilidad de cada repartidor
+  [OK]   nadie disponible: el pedido listo queda SIN repartidor
+  [OK]   aparece en 'pedidos por aceptar'
+  [OK]   los repartidores reciben aviso de pedido listo
+  [OK]   no disponible: no puede aceptarlo (409)
+  [OK]   el cliente no puede aceptar pedidos (403)
+  [OK]   el cliente no ve la bolsa de pedidos (403)
+  [OK]   dos repartidores lo aceptan: solo el primero se lo queda
+  [OK]   ya no aparece en la lista por aceptar
+  [OK]   el cliente recibe aviso de que aceptaron su pedido
+  [OK]   con varios disponibles se asigna al que tiene menos domicilios (Laura; Carlos ya tiene uno)
+  [OK]   el repartidor asignado recibe aviso
+  [OK]   solo se asigna a repartidores disponibles (Laura apagada -> Carlos)
+  [OK]   todos apagados: vuelve a la bolsa
+  [OK]   al entregar todo, los repartidores quedan sin domicilios activos
+
+== Ciclo completo: cocina -> reparto -> entrega
+  [OK]   admin confirma
+  [OK]   no se puede saltar estados (409)
+  [OK]   a cocina
+  [OK]   el cliente ya no puede cancelar en cocina (409)
+  [OK]   listo
+  [OK]   admin NO puede forzar EN_CAMINO (lo hace el repartidor) (403)
+  [OK]   se creó el domicilio con repartidor asignado
+  [OK]   el cliente recibió aviso del repartidor
+  [OK]   otro repartidor NO puede mover ese domicilio (403)
+  [OK]   el cliente NO puede mover domicilios (403)
+  [OK]   el repartidor ve su domicilio
+  [OK]   repartidor sale a ruta -> pedido EN_CAMINO
+  [OK]   un pedido en camino ya no se cancela (409)
+  [OK]   repartidor entrega -> pedido ENTREGADO
+  [OK]   al entregar, el efectivo queda PAGADO
+  [OK]   ya entregado no avanza (409)
+  [OK]   notificaciones con emoji guardadas
+
+== Reasignar repartidor y cancelar pedido LISTO (admin)
+  [OK]   admin reasigna repartidor
+  [OK]   admin cancela un pedido LISTO
+  [OK]   se eliminó su domicilio
+
+== Restaurante / producto desactivados
+  [OK]   producto oculto no se muestra en el menú
+  [OK]   producto oculto no se puede pedir (409)
+  [OK]   restaurante inactivo no aparece en la lista pública
+  [OK]   restaurante inactivo no recibe pedidos (409)
+
+== Panel admin
+  [OK]   resumen de pedidos
+  [OK]   admin crea repartidor
+
+== Monitoreo, trazabilidad y documentación
+  [OK]   /monitor (ADMIN) devuelve el estado de los 8 servicios
+  [OK]   /monitor está protegido: el cliente no entra (403)
+  [OK]   /metrics de un servicio exige ADMIN (403 al cliente)
+  [OK]   las métricas cuentan peticiones y latencia
+         (modo de mensajería detectado: conectado)
+  [OK]   el consumidor de eventos está operativo (RabbitMQ conectado o HTTP directo)
+  [OK]   el X-Request-ID viaja por el gateway y vuelve en la respuesta
+  [OK]   cada respuesta lleva un X-Request-ID aunque no se envíe
+  [OK]   el cliente NO puede inyectar eventos (403)
+  [OK]   Swagger unificado: 50+ operaciones, todas con resumen
+  [OK]   Swagger declara el esquema de seguridad Bearer JWT
+  [OK]   Swagger UI disponible en /docs
+  [OK]   error 404 en formato JSON {detail}
+  [OK]   error 422 de validación (cuerpo inválido)
+
+Resultado: 94 correctas, 0 con falla

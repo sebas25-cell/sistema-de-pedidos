@@ -1,0 +1,40 @@
+sequenceDiagram
+  autonumber
+  actor Cli as Cliente
+  participant GW as Gateway
+  participant RE as restaurantes
+  participant ME as menu
+  participant PE as pedidos
+  participant PA as pagos
+  participant MQ as RabbitMQ
+  participant DO as domicilios
+  participant NO as notificaciones
+  actor Rep as Repartidor
+  Cli->>GW: GET /restaurantes
+  GW->>RE: lista de restaurantes activos
+  Cli->>GW: GET /menu/productos/restaurante/{id}
+  GW->>ME: productos con stock
+  Cli->>GW: POST /pedidos (JWT)
+  GW->>PE: crear pedido
+  PE->>RE: valida restaurante activo
+  PE->>ME: descuenta stock (atómico)
+  PE-->>MQ: pedido.estado_cambiado CREADO
+  PE->>PA: cobrar (monto tomado del pedido)
+  PA->>PE: marca CONFIRMADO
+  PA-->>PE: 201 pago registrado
+  MQ-->>NO: evento → aviso al cliente
+  Note over PE,DO: Cocina avanza EN_COCINA → LISTO
+  PE->>DO: crear domicilio
+  DO->>DO: elige repartidor disponible con menos carga (o bolsa)
+  DO-->>MQ: domicilio.asignado / domicilio.disponible
+  MQ-->>NO: avisos a cliente y repartidor
+  Rep->>GW: PATCH /domicilios/{id}/aceptar (si estaba en bolsa)
+  Rep->>GW: PATCH /domicilios/{id}/avanzar (EN_RUTA)
+  DO->>PE: estado EN_CAMINO (X-Internal-Key)
+  PE-->>MQ: pedido.estado_cambiado EN_CAMINO
+  Rep->>GW: PATCH /domicilios/{id}/avanzar (ENTREGADO)
+  DO->>PE: estado ENTREGADO
+  PE-->>MQ: pedido.estado_cambiado ENTREGADO
+  MQ-->>NO: "Tu pedido fue entregado"
+  Cli->>GW: GET /notificaciones/usuario/{id}
+  GW->>NO: avisos del cliente

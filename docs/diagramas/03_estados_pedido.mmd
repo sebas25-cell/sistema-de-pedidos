@@ -1,0 +1,12 @@
+stateDiagram-v2
+  [*] --> CREADO: POST /pedidos
+  CREADO --> CONFIRMADO: pago registrado
+  CONFIRMADO --> EN_COCINA: ADMIN
+  EN_COCINA --> LISTO: ADMIN (crea/asigna domicilio)
+  LISTO --> EN_CAMINO: repartidor / domicilios
+  EN_CAMINO --> ENTREGADO: repartidor / domicilios
+  CREADO --> CANCELADO: cliente o ADMIN
+  CONFIRMADO --> CANCELADO: cliente o ADMIN
+  EN_COCINA --> CANCELADO: ADMIN
+  CANCELADO --> [*]: restaura stock, anula pago, borra domicilio
+  ENTREGADO --> [*]

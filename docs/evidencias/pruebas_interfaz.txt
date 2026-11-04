@@ -1,0 +1,13 @@
+[OK]    cliente: restaurantes y menú cargan
+[OK]    búsqueda sin resultados
+[OK]    badge del carrito = 3
+[OK]    pedido #28 creado desde la UI
+[OK]    admin: pedido llegó a LISTO con repartidor
+[OK]    cliente: seguimiento llega a Entregado
+[OK]    cliente: campana con avisos sin leer
+[OK]    al abrir la campana los avisos quedan leídos
+[OK]    repartidor: ve su estado de disponibilidad
+[OK]    monitor: 8 servicios y broker conectado
+[OK]    móvil: sin desbordamiento horizontal
+[OK]    sin errores de consola/JS: []
+RESULTADO: TODO OK

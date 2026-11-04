@@ -1,0 +1,4783 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sistema de Pedidos para Restaurantes · API unificada",
+    "version": "4.0.0",
+    "description": "Punto de entrada único de la solución. **Todas las llamadas del navegador pasan por el gateway** (`http://localhost:8000/<servicio>/<ruta>`), que las dirige al microservicio correspondiente.\n\n| Servicio | Responsabilidad |\n|---|---|\n| usuarios | Registro, login (JWT), roles y disponibilidad de repartidores |\n| restaurantes | Catálogo de restaurantes |\n| menu | Productos e inventario |\n| pedidos | Ciclo de vida del pedido y máquina de estados |\n| pagos | Pago de cada pedido |\n| domicilios | Asignación y avance del reparto |\n| notificaciones | Avisos al cliente y al repartidor (consume eventos de RabbitMQ) |\n\n**Autenticación:** inicia sesión en `POST /usuarios/login`, copia el `token`, pulsa **Authorize** y pégalo. Cuentas de prueba: `admin@monteria.com / admin123`, `cliente@monteria.com / cliente123`, `carlos@monteria.com / reparto123`."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000"
+    }
+  ],
+  "tags": [
+    {
+      "name": "usuarios · Autenticación",
+      "description": "Registro público y login (devuelve el JWT)."
+    },
+    {
+      "name": "usuarios · Usuarios",
+      "description": "Consulta de un usuario y administración del personal."
+    },
+    {
+      "name": "usuarios · Repartidores",
+      "description": "Listado y disponibilidad de los repartidores."
+    },
+    {
+      "name": "usuarios · Monitoreo",
+      "description": "Salud y métricas del servicio."
+    },
+    {
+      "name": "restaurantes · Restaurantes",
+      "description": "Consulta pública del catálogo."
+    },
+    {
+      "name": "restaurantes · Administración",
+      "description": "Gestión del catálogo (solo ADMIN)."
+    },
+    {
+      "name": "restaurantes · Monitoreo",
+      "description": "Salud y métricas del servicio."
+    },
+    {
+      "name": "menu · Menú",
+      "description": "Consulta pública de productos."
+    },
+    {
+      "name": "menu · Administración",
+      "description": "Gestión de productos y stock (solo ADMIN)."
+    },
+    {
+      "name": "menu · Uso interno",
+      "description": "Operaciones de stock que invoca el servicio de pedidos."
+    },
+    {
+      "name": "menu · Monitoreo",
+      "description": "Salud y métricas del servicio."
+    },
+    {
+      "name": "pedidos · Pedidos",
+      "description": "Crear, consultar y cancelar pedidos."
+    },
+    {
+      "name": "pedidos · Cocina",
+      "description": "Cambio de estado (ADMIN) y resumen para el tablero."
+    },
+    {
+      "name": "pedidos · Monitoreo",
+      "description": "Salud y métricas del servicio."
+    },
+    {
+      "name": "pagos · Pagos",
+      "description": "Consulta y gestión de pagos."
+    },
+    {
+      "name": "pagos · Uso interno",
+      "description": "Operaciones que invoca el servicio de pedidos."
+    },
+    {
+      "name": "pagos · Monitoreo",
+      "description": "Salud y métricas del servicio."
+    },
+    {
+      "name": "domicilios · Domicilios",
+      "description": "Consulta, asignación y avance del reparto."
+    },
+    {
+      "name": "domicilios · Repartidor",
+      "description": "Pedidos por aceptar y aceptación (rol REPARTIDOR)."
+    },
+    {
+      "name": "domicilios · Uso interno",
+      "description": "Operaciones que invoca el servicio de pedidos."
+    },
+    {
+      "name": "domicilios · Monitoreo",
+      "description": "Salud y métricas del servicio."
+    },
+    {
+      "name": "notificaciones · Notificaciones",
+      "description": "Consulta de los avisos de un usuario."
+    },
+    {
+      "name": "notificaciones · Eventos",
+      "description": "Entrada HTTP de eventos (respaldo cuando no hay RabbitMQ)."
+    },
+    {
+      "name": "notificaciones · Monitoreo",
+      "description": "Salud, métricas y estado del broker."
+    }
+  ],
+  "paths": {
+    "/usuarios/health": {
+      "get": {
+        "tags": [
+          "usuarios · Monitoreo"
+        ],
+        "summary": "Estado del servicio",
+        "description": "Devuelve 200 si el servicio y su base de datos responden, o 503 si algo falla. Lo usan los healthchecks de Docker y el panel de monitoreo.",
+        "operationId": "usuarios_health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usuarios/metrics": {
+      "get": {
+        "tags": [
+          "usuarios · Monitoreo"
+        ],
+        "summary": "Métricas del servicio (solo ADMIN)",
+        "description": "Peticiones, errores por clase, latencia media y p95, rutas más usadas, errores y avisos recientes.",
+        "operationId": "usuarios_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/usuarios/registro": {
+      "post": {
+        "tags": [
+          "usuarios · Autenticación"
+        ],
+        "summary": "Registrar un cliente",
+        "description": "Registro público: siempre crea un usuario con rol `CLIENTE`. El personal lo crea un ADMIN con `POST /admin/usuarios`.",
+        "operationId": "usuarios_registro_registro_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/usuarios_Registro"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/usuarios_UsuarioOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usuarios/login": {
+      "post": {
+        "tags": [
+          "usuarios · Autenticación"
+        ],
+        "summary": "Iniciar sesión",
+        "description": "Valida correo y contraseña (bcrypt) y devuelve los datos del usuario con su **token JWT** (vigencia 12 h). Tras 5 intentos fallidos con el mismo correo se bloquea 15 minutos.",
+        "operationId": "usuarios_login_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/usuarios_Login"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/usuarios_LoginOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiados intentos, espera antes de reintentar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usuarios/usuarios/{uid}": {
+      "get": {
+        "tags": [
+          "usuarios · Usuarios"
+        ],
+        "summary": "Consultar un usuario",
+        "description": "Un CLIENTE o REPARTIDOR solo puede consultarse a sí mismo; un ADMIN, a cualquiera.",
+        "operationId": "usuarios_get_usuario_usuarios__uid__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Uid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/usuarios_UsuarioOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usuarios/repartidores": {
+      "get": {
+        "tags": [
+          "usuarios · Repartidores"
+        ],
+        "summary": "Listar repartidores y su disponibilidad (ADMIN)",
+        "description": "Devuelve `id`, `nombre` y `disponible` de cada repartidor. Lo consume el servicio de domicilios para asignar pedidos (llamada interna).",
+        "operationId": "usuarios_repartidores_repartidores_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/usuarios/repartidores/yo": {
+      "get": {
+        "tags": [
+          "usuarios · Repartidores"
+        ],
+        "summary": "Mi disponibilidad (REPARTIDOR)",
+        "operationId": "usuarios_mi_disponibilidad_repartidores_yo_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/usuarios/repartidores/disponibilidad": {
+      "patch": {
+        "tags": [
+          "usuarios · Repartidores"
+        ],
+        "summary": "Activar o desactivar mi disponibilidad",
+        "description": "Solo los repartidores disponibles reciben asignación automática de pedidos y pueden aceptar pedidos de la bolsa.",
+        "operationId": "usuarios_cambiar_disponibilidad_repartidores_disponibilidad_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/usuarios_Disponibilidad"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/usuarios/admin/usuarios": {
+      "get": {
+        "tags": [
+          "usuarios · Usuarios"
+        ],
+        "summary": "Listar usuarios (ADMIN)",
+        "operationId": "usuarios_listar_usuarios_admin_usuarios_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/usuarios_UsuarioOut"
+                  },
+                  "type": "array",
+                  "title": "Response Listar Usuarios Admin Usuarios Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "usuarios · Usuarios"
+        ],
+        "summary": "Crear un usuario de cualquier rol (ADMIN)",
+        "description": "Es la forma de crear repartidores y otros administradores.",
+        "operationId": "usuarios_crear_usuario_admin_usuarios_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/usuarios_NuevoUsuario"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/usuarios_UsuarioOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/restaurantes/health": {
+      "get": {
+        "tags": [
+          "restaurantes · Monitoreo"
+        ],
+        "summary": "Estado del servicio",
+        "description": "Devuelve 200 si el servicio y su base de datos responden, o 503 si algo falla. Lo usan los healthchecks de Docker y el panel de monitoreo.",
+        "operationId": "restaurantes_health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/restaurantes/metrics": {
+      "get": {
+        "tags": [
+          "restaurantes · Monitoreo"
+        ],
+        "summary": "Métricas del servicio (solo ADMIN)",
+        "description": "Peticiones, errores por clase, latencia media y p95, rutas más usadas, errores y avisos recientes.",
+        "operationId": "restaurantes_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/restaurantes/restaurantes": {
+      "get": {
+        "tags": [
+          "restaurantes · Restaurantes"
+        ],
+        "summary": "Listar restaurantes activos",
+        "description": "Público. Solo devuelve los restaurantes activos.",
+        "operationId": "restaurantes_listar_restaurantes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/restaurantes_RestauranteOut"
+                  },
+                  "type": "array",
+                  "title": "Response Listar Restaurantes Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "restaurantes · Administración"
+        ],
+        "summary": "Crear un restaurante (ADMIN)",
+        "operationId": "restaurantes_crear_restaurantes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/restaurantes_RestauranteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/restaurantes_RestauranteOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/restaurantes/restaurantes/{rid}": {
+      "get": {
+        "tags": [
+          "restaurantes · Restaurantes"
+        ],
+        "summary": "Consultar un restaurante",
+        "description": "Público. Devuelve el restaurante aunque esté inactivo (el servicio de pedidos lo usa para validar que esté recibiendo pedidos).",
+        "operationId": "restaurantes_detalle_restaurantes__rid__get",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/restaurantes_RestauranteOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "restaurantes · Administración"
+        ],
+        "summary": "Actualizar un restaurante (ADMIN)",
+        "operationId": "restaurantes_actualizar_restaurantes__rid__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/restaurantes_RestauranteIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/restaurantes_RestauranteOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "restaurantes · Administración"
+        ],
+        "summary": "Desactivar un restaurante (ADMIN)",
+        "description": "Baja lógica: deja de mostrarse y de recibir pedidos, pero se conserva su historial.",
+        "operationId": "restaurantes_desactivar_restaurantes__rid__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/restaurantes/admin/restaurantes": {
+      "get": {
+        "tags": [
+          "restaurantes · Administración"
+        ],
+        "summary": "Listar todos los restaurantes, incluidos los inactivos (ADMIN)",
+        "operationId": "restaurantes_listar_todos_admin_restaurantes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/restaurantes_RestauranteOut"
+                  },
+                  "type": "array",
+                  "title": "Response Listar Todos Admin Restaurantes Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/menu/health": {
+      "get": {
+        "tags": [
+          "menu · Monitoreo"
+        ],
+        "summary": "Estado del servicio",
+        "description": "Devuelve 200 si el servicio y su base de datos responden, o 503 si algo falla. Lo usan los healthchecks de Docker y el panel de monitoreo.",
+        "operationId": "menu_health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/menu/metrics": {
+      "get": {
+        "tags": [
+          "menu · Monitoreo"
+        ],
+        "summary": "Métricas del servicio (solo ADMIN)",
+        "description": "Peticiones, errores por clase, latencia media y p95, rutas más usadas, errores y avisos recientes.",
+        "operationId": "menu_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/menu/productos/restaurante/{rid}": {
+      "get": {
+        "tags": [
+          "menu · Menú"
+        ],
+        "summary": "Menú de un restaurante",
+        "description": "Público. Solo productos activos (los ocultos no se muestran).",
+        "operationId": "menu_menu_restaurante_productos_restaurante__rid__get",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/menu_ProductoOut"
+                  },
+                  "title": "Response Menu Restaurante Productos Restaurante  Rid  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/menu/admin/productos/restaurante/{rid}": {
+      "get": {
+        "tags": [
+          "menu · Administración"
+        ],
+        "summary": "Menú completo de un restaurante, con productos ocultos (ADMIN)",
+        "operationId": "menu_menu_completo_admin_productos_restaurante__rid__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/menu_ProductoOut"
+                  },
+                  "title": "Response Menu Completo Admin Productos Restaurante  Rid  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/menu/productos/{pid}": {
+      "get": {
+        "tags": [
+          "menu · Menú"
+        ],
+        "summary": "Consultar un producto",
+        "description": "Público. Incluye precio, stock y si está activo.",
+        "operationId": "menu_producto_productos__pid__get",
+        "parameters": [
+          {
+            "name": "pid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/menu_ProductoOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "menu · Administración"
+        ],
+        "summary": "Actualizar un producto (ADMIN)",
+        "operationId": "menu_actualizar_productos__pid__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/menu_ProductoUpd"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/menu_ProductoOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "menu · Administración"
+        ],
+        "summary": "Ocultar un producto (ADMIN)",
+        "description": "Baja lógica: deja de mostrarse pero se conserva en los pedidos anteriores.",
+        "operationId": "menu_desactivar_productos__pid__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/menu/productos": {
+      "post": {
+        "tags": [
+          "menu · Administración"
+        ],
+        "summary": "Crear un producto (ADMIN)",
+        "description": "Valida por API que el restaurante exista.",
+        "operationId": "menu_crear_productos_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/menu_ProductoIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/menu_ProductoOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Un servicio del que depende esta operación no está disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/menu/productos/{pid}/reponer": {
+      "patch": {
+        "tags": [
+          "menu · Administración"
+        ],
+        "summary": "Sumar stock",
+        "description": "Reposición manual del ADMIN, o devolución automática que hace el servicio de pedidos cuando se cancela un pedido.",
+        "operationId": "menu_reponer_productos__pid__reponer_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/menu_Cantidad"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/menu/productos/{pid}/descontar": {
+      "patch": {
+        "tags": [
+          "menu · Uso interno"
+        ],
+        "summary": "Descontar stock (solo servicios internos)",
+        "description": "Atómico: `UPDATE ... WHERE stock >= cantidad`; si no alcanza responde 409 sin tocar nada. Solo acepta llamadas firmadas con la clave interna (servicio de pedidos).",
+        "operationId": "menu_descontar_productos__pid__descontar_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/menu_Cantidad"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pedidos/health": {
+      "get": {
+        "tags": [
+          "pedidos · Monitoreo"
+        ],
+        "summary": "Estado del servicio",
+        "description": "Devuelve 200 si el servicio y su base de datos responden, o 503 si algo falla. Lo usan los healthchecks de Docker y el panel de monitoreo.",
+        "operationId": "pedidos_health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pedidos/metrics": {
+      "get": {
+        "tags": [
+          "pedidos · Monitoreo"
+        ],
+        "summary": "Métricas del servicio (solo ADMIN)",
+        "description": "Peticiones, errores por clase, latencia media y p95, rutas más usadas, errores y avisos recientes.",
+        "operationId": "pedidos_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/pedidos/pedidos": {
+      "post": {
+        "tags": [
+          "pedidos · Pedidos"
+        ],
+        "summary": "Crear un pedido",
+        "description": "Flujo: 1) valida restaurante activo, 2) valida productos y calcula el total con los precios del servidor, 3) **reserva el stock** (atómico), 4) guarda pedido y detalle en una transacción, 5) publica el evento `CREADO`, 6) pide el pago al servicio de pagos. Con TARJETA/NEQUI el pago se aprueba y el pedido queda `CONFIRMADO`; con EFECTIVO queda `CREADO`.\n\nSi el pago no puede procesarse, el pedido se cancela y el stock se devuelve.",
+        "operationId": "pedidos_crear_pedido_pedidos_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pedidos_PedidoIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pedidos_PedidoCreado"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Un servicio del que depende esta operación no está disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "pedidos · Pedidos"
+        ],
+        "summary": "Listar pedidos",
+        "description": "Un CLIENTE solo ve los suyos; un ADMIN puede filtrar por `cliente_id`, `estado` o `activos` (los que no están ENTREGADO ni CANCELADO). Cada pedido incluye `unidades`.",
+        "operationId": "pedidos_listar_pedidos_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cliente Id"
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Estado"
+            }
+          },
+          {
+            "name": "activos",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Activos"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pedidos/pedidos/resumen": {
+      "get": {
+        "tags": [
+          "pedidos · Cocina"
+        ],
+        "summary": "Resumen para el tablero (ADMIN)",
+        "description": "Pedidos activos y entregados/cancelados hoy.",
+        "operationId": "pedidos_resumen_pedidos_resumen_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/pedidos/pedidos/{pid}": {
+      "get": {
+        "tags": [
+          "pedidos · Pedidos"
+        ],
+        "summary": "Consultar un pedido con su detalle",
+        "description": "Un CLIENTE solo puede ver sus propios pedidos. Incluye la lista `items`.",
+        "operationId": "pedidos_detalle_pedidos__pid__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pedidos/pedidos/{pid}/estado": {
+      "patch": {
+        "tags": [
+          "pedidos · Cocina"
+        ],
+        "summary": "Avanzar el estado (ADMIN)",
+        "description": "Solo permite pasar al estado **siguiente**. `EN_CAMINO` y `ENTREGADO` los mueve el servicio de domicilios cuando el repartidor avanza (403 si otro intenta). Al pasar a `LISTO` se crea el domicilio; al `ENTREGADO` se cobra el efectivo. Publica el evento `pedido.estado_cambiado`.",
+        "operationId": "pedidos_cambiar_estado_pedidos__pid__estado_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pedidos_CambioEstado"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pedidos_EstadoOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pedidos/pedidos/{pid}/cancelar": {
+      "post": {
+        "tags": [
+          "pedidos · Pedidos"
+        ],
+        "summary": "Cancelar un pedido",
+        "description": "El CLIENTE puede cancelar mientras esté `CREADO` o `CONFIRMADO`; el ADMIN hasta `LISTO`. Compensa: devuelve el stock, anula el pago y libera el domicilio, y avisa al cliente.",
+        "operationId": "pedidos_cancelar_pedidos__pid__cancelar_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pedidos_EstadoOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pagos/health": {
+      "get": {
+        "tags": [
+          "pagos · Monitoreo"
+        ],
+        "summary": "Estado del servicio",
+        "description": "Devuelve 200 si el servicio y su base de datos responden, o 503 si algo falla. Lo usan los healthchecks de Docker y el panel de monitoreo.",
+        "operationId": "pagos_health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pagos/metrics": {
+      "get": {
+        "tags": [
+          "pagos · Monitoreo"
+        ],
+        "summary": "Métricas del servicio (solo ADMIN)",
+        "description": "Peticiones, errores por clase, latencia media y p95, rutas más usadas, errores y avisos recientes.",
+        "operationId": "pagos_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/pagos/pagos": {
+      "post": {
+        "tags": [
+          "pagos · Uso interno"
+        ],
+        "summary": "Registrar el pago de un pedido",
+        "description": "Consulta el pedido por API, toma su total como monto y registra el pago. Es **idempotente**: si ya existe un pago vigente del pedido lo devuelve. Con TARJETA/NEQUI el pago queda `PAGADO` y pide al servicio de pedidos pasar a `CONFIRMADO`.",
+        "operationId": "pagos_crear_pago_pagos_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pagos_PagoIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pagos_PagoOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Falló un servicio del que depende esta operación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Un servicio del que depende esta operación no está disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/pagos/pagos/pedido/{pedido_id}": {
+      "get": {
+        "tags": [
+          "pagos · Pagos"
+        ],
+        "summary": "Pagos de un pedido (ADMIN)",
+        "operationId": "pagos_pagos_de_pedido_pagos_pedido__pedido_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pedido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pedido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pagos/pagos/pedido/{pedido_id}/cobrar": {
+      "patch": {
+        "tags": [
+          "pagos · Uso interno"
+        ],
+        "summary": "Cobrar el efectivo al entregar",
+        "description": "El pago en efectivo `PENDIENTE` pasa a `PAGADO`. Lo invoca pedidos al marcar ENTREGADO.",
+        "operationId": "pagos_cobrar_pagos_pedido__pedido_id__cobrar_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pedido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pedido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pagos/pagos/pedido/{pedido_id}/anular": {
+      "patch": {
+        "tags": [
+          "pagos · Uso interno"
+        ],
+        "summary": "Anular el pago de un pedido cancelado",
+        "description": "Compensación: lo `PENDIENTE` queda `FALLIDO` y lo `PAGADO` queda `REEMBOLSADO` (simulado).",
+        "operationId": "pagos_anular_pagos_pedido__pedido_id__anular_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pedido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pedido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pagos/pagos/{pago_id}/estado": {
+      "patch": {
+        "tags": [
+          "pagos · Pagos"
+        ],
+        "summary": "Cambiar el estado de un pago (ADMIN)",
+        "operationId": "pagos_cambiar_estado_pagos__pago_id__estado_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pago_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pago Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pagos_CambioEstado"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pagos_PagoOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/domicilios/health": {
+      "get": {
+        "tags": [
+          "domicilios · Monitoreo"
+        ],
+        "summary": "Estado del servicio",
+        "description": "Devuelve 200 si el servicio y su base de datos responden, o 503 si algo falla. Lo usan los healthchecks de Docker y el panel de monitoreo.",
+        "operationId": "domicilios_health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/domicilios/metrics": {
+      "get": {
+        "tags": [
+          "domicilios · Monitoreo"
+        ],
+        "summary": "Métricas del servicio (solo ADMIN)",
+        "description": "Peticiones, errores por clase, latencia media y p95, rutas más usadas, errores y avisos recientes.",
+        "operationId": "domicilios_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/domicilios/domicilios": {
+      "get": {
+        "tags": [
+          "domicilios · Domicilios"
+        ],
+        "summary": "Domicilios activos (ADMIN)",
+        "operationId": "domicilios_activos_domicilios_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "domicilios · Uso interno"
+        ],
+        "summary": "Crear el domicilio de un pedido LISTO",
+        "description": "Idempotente. Elige un repartidor disponible; si no hay, el domicilio queda sin repartidor (`repartidor_id = null`) y publica `domicilio.disponible` para avisar a los repartidores.",
+        "operationId": "domicilios_crear_domicilios_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/domicilios_DomicilioIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/domicilios/domicilios/disponibles": {
+      "get": {
+        "tags": [
+          "domicilios · Repartidor"
+        ],
+        "summary": "Pedidos listos por aceptar (REPARTIDOR)",
+        "description": "La bolsa: domicilios sin repartidor que un repartidor disponible puede aceptar.",
+        "operationId": "domicilios_domicilios_disponibles_domicilios_disponibles_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/domicilios/domicilios/{did}/aceptar": {
+      "patch": {
+        "tags": [
+          "domicilios · Repartidor"
+        ],
+        "summary": "Aceptar un domicilio de la bolsa (REPARTIDOR)",
+        "description": "Exige estar disponible (se consulta al servicio de usuarios). La asignación es un `UPDATE` atómico: si dos repartidores aceptan a la vez, solo uno gana y el otro recibe 409.",
+        "operationId": "domicilios_aceptar_domicilios__did__aceptar_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "did",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Did"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Un servicio del que depende esta operación no está disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/domicilios/domicilios/pedido/{pedido_id}": {
+      "get": {
+        "tags": [
+          "domicilios · Domicilios"
+        ],
+        "summary": "Domicilio de un pedido (ADMIN, REPARTIDOR)",
+        "description": "Un REPARTIDOR solo puede ver los domicilios que le pertenecen.",
+        "operationId": "domicilios_por_pedido_domicilios_pedido__pedido_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pedido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pedido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "domicilios · Uso interno"
+        ],
+        "summary": "Liberar el domicilio de un pedido cancelado",
+        "description": "Solo lo usa el servicio de pedidos cuando se cancela un pedido ya asignado.",
+        "operationId": "domicilios_eliminar_domicilios_pedido__pedido_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pedido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pedido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/domicilios/domicilios/repartidor/{rid}": {
+      "get": {
+        "tags": [
+          "domicilios · Domicilios"
+        ],
+        "summary": "Domicilios activos de un repartidor",
+        "description": "Un REPARTIDOR solo puede consultar los suyos.",
+        "operationId": "domicilios_por_repartidor_domicilios_repartidor__rid__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/domicilios/domicilios/{did}/asignar": {
+      "patch": {
+        "tags": [
+          "domicilios · Domicilios"
+        ],
+        "summary": "Asignar o reasignar repartidor (ADMIN)",
+        "description": "Solo antes de que el domicilio salga a ruta.",
+        "operationId": "domicilios_asignar_domicilios__did__asignar_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "did",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Did"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/domicilios_Asignacion"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/domicilios/domicilios/{did}/avanzar": {
+      "patch": {
+        "tags": [
+          "domicilios · Domicilios"
+        ],
+        "summary": "Avanzar el domicilio (REPARTIDOR dueño o ADMIN)",
+        "description": "`ASIGNADO → EN_RUTA` (el pedido pasa a `EN_CAMINO`) y `EN_RUTA → ENTREGADO` (el pedido pasa a `ENTREGADO`). Si el servicio de pedidos rechaza el cambio, se **deshace** el del domicilio para que ambos servicios sigan coherentes.",
+        "operationId": "domicilios_avanzar_domicilios__did__avanzar_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "did",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Did"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto con el estado actual del recurso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Falló un servicio del que depende esta operación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Un servicio del que depende esta operación no está disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notificaciones/health": {
+      "get": {
+        "tags": [
+          "notificaciones · Monitoreo"
+        ],
+        "summary": "Estado del servicio",
+        "description": "Devuelve 200 si el servicio y su base de datos responden, o 503 si algo falla. Lo usan los healthchecks de Docker y el panel de monitoreo.",
+        "operationId": "notificaciones_health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notificaciones/metrics": {
+      "get": {
+        "tags": [
+          "notificaciones · Monitoreo"
+        ],
+        "summary": "Métricas del servicio (solo ADMIN)",
+        "description": "Peticiones, errores por clase, latencia media y p95, rutas más usadas, errores y avisos recientes.",
+        "operationId": "notificaciones_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/notificaciones/eventos": {
+      "post": {
+        "tags": [
+          "notificaciones · Eventos"
+        ],
+        "summary": "Recibir un evento por HTTP (uso interno)",
+        "description": "Mismo procesamiento que el consumidor de RabbitMQ. Lo usan los demás servicios como respaldo cuando el broker no está disponible.",
+        "operationId": "notificaciones_recibir_evento_eventos_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/notificaciones_EventoIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos o regla de negocio no cumplida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/notificaciones/notificaciones": {
+      "post": {
+        "tags": [
+          "notificaciones · Notificaciones"
+        ],
+        "summary": "Crear una notificación directa (uso interno)",
+        "operationId": "notificaciones_crear_notificaciones_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/notificaciones_NotifIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/notificaciones/notificaciones/usuario/{uid}": {
+      "get": {
+        "tags": [
+          "notificaciones · Notificaciones"
+        ],
+        "summary": "Últimos 20 avisos de un usuario",
+        "description": "Cada usuario solo ve los suyos; el ADMIN puede ver los de cualquiera.",
+        "operationId": "notificaciones_de_usuario_notificaciones_usuario__uid__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Uid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notificaciones/notificaciones/usuario/{uid}/leidas": {
+      "patch": {
+        "tags": [
+          "notificaciones · Notificaciones"
+        ],
+        "summary": "Marcar todos mis avisos como leídos",
+        "operationId": "notificaciones_marcar_todas_notificaciones_usuario__uid__leidas_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Uid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notificaciones/notificaciones/{nid}/leido": {
+      "patch": {
+        "tags": [
+          "notificaciones · Notificaciones"
+        ],
+        "summary": "Marcar un aviso como leído",
+        "operationId": "notificaciones_marcar_leido_notificaciones__nid__leido_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "nid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Nid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión, token inválido o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El rol del usuario no tiene permiso para esta acción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "usuarios_Disponibilidad": {
+        "properties": {
+          "disponible": {
+            "type": "boolean",
+            "title": "Disponible"
+          }
+        },
+        "type": "object",
+        "required": [
+          "disponible"
+        ],
+        "title": "Disponibilidad"
+      },
+      "Error": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "Error",
+        "description": "Formato de todas las respuestas de error del sistema."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "usuarios_Login": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "Login",
+        "examples": [
+          {
+            "email": "cliente@monteria.com",
+            "password": "cliente123"
+          }
+        ]
+      },
+      "usuarios_LoginOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "rol": {
+            "type": "string",
+            "title": "Rol"
+          },
+          "token": {
+            "type": "string",
+            "title": "Token",
+            "description": "JWT; enviarlo como `Authorization: Bearer <token>`"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "email",
+          "rol",
+          "token"
+        ],
+        "title": "LoginOut"
+      },
+      "usuarios_NuevoUsuario": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 2,
+            "title": "Nombre"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 150,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 72,
+            "title": "Password",
+            "description": "Mínimo 6 caracteres"
+          },
+          "rol": {
+            "type": "string",
+            "title": "Rol",
+            "description": "CLIENTE, ADMIN o REPARTIDOR"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "email",
+          "password",
+          "rol"
+        ],
+        "title": "NuevoUsuario",
+        "examples": [
+          {
+            "email": "pedro@monteria.com",
+            "nombre": "Pedro Gómez",
+            "password": "reparto1",
+            "rol": "REPARTIDOR"
+          }
+        ]
+      },
+      "usuarios_Registro": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 2,
+            "title": "Nombre"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 150,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 72,
+            "title": "Password",
+            "description": "Mínimo 6 caracteres"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "email",
+          "password"
+        ],
+        "title": "Registro",
+        "examples": [
+          {
+            "email": "ana@correo.com",
+            "nombre": "Ana Pérez",
+            "password": "secreto1"
+          }
+        ]
+      },
+      "usuarios_UsuarioOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "rol": {
+            "type": "string",
+            "title": "Rol"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "email",
+          "rol"
+        ],
+        "title": "UsuarioOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "restaurantes_RestauranteIn": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Nombre"
+          },
+          "direccion": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Direccion",
+            "default": ""
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre"
+        ],
+        "title": "RestauranteIn",
+        "examples": [
+          {
+            "activo": true,
+            "direccion": "Calle 27 #3-45, Montería",
+            "nombre": "Burger del Sinú",
+            "telefono": "3001234567"
+          }
+        ]
+      },
+      "restaurantes_RestauranteOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "direccion": {
+            "type": "string",
+            "title": "Direccion"
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          },
+          "activo": {
+            "type": "integer",
+            "title": "Activo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "direccion",
+          "activo"
+        ],
+        "title": "RestauranteOut"
+      },
+      "menu_Cantidad": {
+        "properties": {
+          "cantidad": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Cantidad"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cantidad"
+        ],
+        "title": "Cantidad"
+      },
+      "menu_ProductoIn": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Nombre"
+          },
+          "categoria": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoria"
+          },
+          "precio": {
+            "type": "number",
+            "exclusiveMaximum": 100000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Precio"
+          },
+          "stock": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Stock",
+            "default": 0
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo",
+            "default": true
+          },
+          "restaurante_id": {
+            "type": "integer",
+            "title": "Restaurante Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "precio",
+          "restaurante_id"
+        ],
+        "title": "ProductoIn",
+        "examples": [
+          {
+            "activo": true,
+            "categoria": "Hamburguesas",
+            "nombre": "Hamburguesa Clásica",
+            "precio": 18000,
+            "restaurante_id": 1,
+            "stock": 40
+          }
+        ]
+      },
+      "menu_ProductoOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "restaurante_id": {
+            "type": "integer",
+            "title": "Restaurante Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "categoria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoria"
+          },
+          "precio": {
+            "type": "number",
+            "title": "Precio"
+          },
+          "stock": {
+            "type": "integer",
+            "title": "Stock"
+          },
+          "activo": {
+            "type": "integer",
+            "title": "Activo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "restaurante_id",
+          "nombre",
+          "precio",
+          "stock",
+          "activo"
+        ],
+        "title": "ProductoOut"
+      },
+      "menu_ProductoUpd": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Nombre"
+          },
+          "categoria": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoria"
+          },
+          "precio": {
+            "type": "number",
+            "exclusiveMaximum": 100000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Precio"
+          },
+          "stock": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Stock",
+            "default": 0
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "precio"
+        ],
+        "title": "ProductoUpd"
+      },
+      "pedidos_CambioEstado": {
+        "properties": {
+          "estado": {
+            "type": "string",
+            "title": "Estado",
+            "description": "Estado siguiente en la secuencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "estado"
+        ],
+        "title": "CambioEstado",
+        "examples": [
+          {
+            "estado": "CONFIRMADO"
+          }
+        ]
+      },
+      "pedidos_EstadoOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "estado"
+        ],
+        "title": "EstadoOut"
+      },
+      "pedidos_Item": {
+        "properties": {
+          "producto_id": {
+            "type": "integer",
+            "title": "Producto Id"
+          },
+          "cantidad": {
+            "type": "integer",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Cantidad"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "cantidad"
+        ],
+        "title": "Item"
+      },
+      "pedidos_PedidoCreado": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "total": {
+            "type": "number",
+            "title": "Total"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "total",
+          "estado"
+        ],
+        "title": "PedidoCreado"
+      },
+      "pedidos_PedidoIn": {
+        "properties": {
+          "cliente_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cliente Id",
+            "description": "Solo lo usa un ADMIN; el cliente siempre es quien tiene la sesión"
+          },
+          "restaurante_id": {
+            "type": "integer",
+            "title": "Restaurante Id"
+          },
+          "direccion": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Direccion"
+          },
+          "metodo_pago": {
+            "type": "string",
+            "title": "Metodo Pago",
+            "description": "EFECTIVO, TARJETA o NEQUI",
+            "default": "EFECTIVO"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/pedidos_Item"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "restaurante_id",
+          "direccion",
+          "items"
+        ],
+        "title": "PedidoIn",
+        "examples": [
+          {
+            "direccion": "Calle 30 #5-20, Montería",
+            "items": [
+              {
+                "cantidad": 2,
+                "producto_id": 1
+              },
+              {
+                "cantidad": 1,
+                "producto_id": 6
+              }
+            ],
+            "metodo_pago": "TARJETA",
+            "restaurante_id": 1
+          }
+        ]
+      },
+      "pagos_CambioEstado": {
+        "properties": {
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "estado"
+        ],
+        "title": "CambioEstado"
+      },
+      "pagos_PagoIn": {
+        "properties": {
+          "pedido_id": {
+            "type": "integer",
+            "title": "Pedido Id"
+          },
+          "metodo": {
+            "type": "string",
+            "title": "Metodo",
+            "description": "EFECTIVO, TARJETA o NEQUI"
+          },
+          "monto": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monto",
+            "description": "Opcional: si viene, debe coincidir con el total del pedido"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pedido_id",
+          "metodo"
+        ],
+        "title": "PagoIn",
+        "examples": [
+          {
+            "metodo": "TARJETA",
+            "pedido_id": 1
+          }
+        ]
+      },
+      "pagos_PagoOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "estado"
+        ],
+        "title": "PagoOut"
+      },
+      "domicilios_Asignacion": {
+        "properties": {
+          "repartidor_id": {
+            "type": "integer",
+            "title": "Repartidor Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "repartidor_id"
+        ],
+        "title": "Asignacion"
+      },
+      "domicilios_DomicilioIn": {
+        "properties": {
+          "pedido_id": {
+            "type": "integer",
+            "title": "Pedido Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pedido_id"
+        ],
+        "title": "DomicilioIn",
+        "examples": [
+          {
+            "pedido_id": 1
+          }
+        ]
+      },
+      "notificaciones_EventoIn": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Identificador único del evento (permite descartar repetidos)"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo",
+            "description": "pedido.estado_cambiado, domicilio.asignado, domicilio.aceptado o domicilio.disponible"
+          },
+          "datos": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Datos"
+          },
+          "ts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tipo",
+          "datos"
+        ],
+        "title": "EventoIn",
+        "examples": [
+          {
+            "datos": {
+              "cliente_id": 4,
+              "estado": "EN_COCINA",
+              "pedido_id": 12
+            },
+            "id": "9f1c2b7a0e4d4b6f8a1d3c5e7f901234",
+            "tipo": "pedido.estado_cambiado"
+          }
+        ]
+      },
+      "notificaciones_NotifIn": {
+        "properties": {
+          "usuario_id": {
+            "type": "integer",
+            "title": "Usuario Id"
+          },
+          "mensaje": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Mensaje"
+          }
+        },
+        "type": "object",
+        "required": [
+          "usuario_id",
+          "mensaje"
+        ],
+        "title": "NotifIn"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "description": "Token JWT que entrega `POST /usuarios/login`. Pégalo sin la palabra 'Bearer'.",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

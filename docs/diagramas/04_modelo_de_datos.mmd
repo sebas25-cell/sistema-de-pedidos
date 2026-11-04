@@ -1,0 +1,46 @@
+erDiagram
+  USUARIOS { int id PK
+    string nombre
+    string email UK
+    string password "bcrypt"
+    string rol "CLIENTE|ADMIN|REPARTIDOR"
+    bool disponible }
+  RESTAURANTES { int id PK
+    string nombre
+    string direccion
+    string telefono
+    bool activo }
+  PRODUCTOS { int id PK
+    int restaurante_id "ref lógica"
+    string nombre
+    string categoria
+    decimal precio
+    int stock
+    bool activo }
+  PEDIDOS { int id PK
+    int cliente_id "ref lógica"
+    int restaurante_id "ref lógica"
+    decimal total
+    string direccion
+    string estado }
+  DETALLE_PEDIDO { int id PK
+    int pedido_id FK
+    int producto_id "ref lógica"
+    string nombre "copia"
+    int cantidad
+    decimal precio "copia" }
+  PAGOS { int id PK
+    int pedido_id "ref lógica"
+    decimal monto
+    string metodo
+    string estado }
+  DOMICILIOS { int id PK
+    int pedido_id "ref lógica"
+    int repartidor_id "ref lógica, NULL=bolsa"
+    string estado }
+  NOTIFICACIONES { int id PK
+    int usuario_id "ref lógica"
+    string mensaje
+    bool leido
+    string evento_id "UNIQUE con usuario_id" }
+  PEDIDOS ||--|{ DETALLE_PEDIDO : contiene

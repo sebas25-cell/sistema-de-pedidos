@@ -1,0 +1,32 @@
+flowchart TB
+  C["Cliente<br/>index.html"] --> GW
+  A["Admin / Repartidor<br/>admin.html · monitor.html"] --> GW
+  S["Swagger UI<br/>/docs"] --> GW
+  GW["API Gateway :8000<br/>enrutamiento · Swagger unificado<br/>/estado · /monitor · X-Request-ID"]
+  GW --> U["usuarios :8001"]
+  GW --> R["restaurantes :8002"]
+  GW --> M["menu :8003"]
+  GW --> P["pedidos :8004"]
+  GW --> G["pagos :8005"]
+  GW --> D["domicilios :8006"]
+  GW --> N["notificaciones :8007"]
+  P -.-> R
+  P -.-> M
+  P -.-> G
+  D -.-> P
+  D -.-> U
+  G -.-> P
+  MQ{{"RabbitMQ<br/>exchange eventos"}}
+  P ==> MQ
+  D ==> MQ
+  MQ ==> N
+  MQ -.-> DLQ[("DLQ")]
+  U --- DU[("db_usuarios")]
+  R --- DR[("db_restaurantes")]
+  M --- DM[("db_menu")]
+  P --- DP[("db_pedidos")]
+  G --- DG[("db_pagos")]
+  D --- DD[("db_domicilios")]
+  N --- DN[("db_notificaciones")]
+  L["Leyenda<br/>flecha fina: HTTP desde el cliente<br/>punteada: HTTP entre servicios (X-Internal-Key)<br/>gruesa: eventos asíncronos"]
+  style L fill:#fff,stroke:#999,stroke-dasharray:4
