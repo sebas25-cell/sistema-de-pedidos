@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pedidos Montería</title>
+<meta name="description" content="Pide comida de los mejores restaurantes de Montería y sigue tu pedido en tiempo real.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilo.css">
+<style>
+.wrap{max-width:1180px;margin:0 auto;padding:24px}
+.buscar{flex:1;max-width:380px;position:relative}
+.buscar input{border-radius:99px;padding-left:40px}
+.buscar::before{content:"🔍";position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:.9rem;opacity:.7}
+/* acceso */
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center;min-height:calc(100vh - 62px);padding:24px;max-width:1180px;margin:0 auto}
+.hero h1{font-size:clamp(2.2rem,5vw,3.6rem);line-height:1.05;font-weight:800}
+.hero h1 em{font-style:normal;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p.lead{color:var(--mute);font-size:1.1rem;margin:16px 0 22px;max-width:46ch}
+.pasos{display:flex;gap:14px;flex-wrap:wrap}
+.pasos span{display:flex;align-items:center;gap:8px;background:var(--surf);border:1px solid var(--line);border-radius:99px;padding:8px 14px;font-size:.9rem}
+.platos{position:relative;height:320px;margin-top:30px}
+.platos div{position:absolute;display:grid;place-items:center;border-radius:50%;background:var(--surf);border:1px solid var(--line);box-shadow:var(--sombra);animation:flota 6s ease-in-out infinite}
+@keyframes flota{50%{transform:translateY(-12px)}}
+#auth h2{font-size:1.6rem;margin-bottom:4px}
+#auth input{margin-bottom:10px}
+#auth .row{display:flex;gap:10px;margin-top:6px}#auth .row .btn{flex:1}
+.demo{margin-top:14px;font-size:.84rem;color:var(--mute);background:var(--surf2);border-radius:10px;padding:8px 12px;cursor:pointer}
+@media(max-width:860px){.hero{grid-template-columns:1fr;min-height:0}.platos{display:none}}
+/* restaurantes */
+.sec-t{display:flex;align-items:baseline;justify-content:space-between;margin:6px 0 14px}
+.sec-t h2{font-size:1.35rem}
+.rests{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px;margin-bottom:30px}
+.rest{text-align:left;background:var(--surf);border:2px solid var(--line);border-radius:var(--r);overflow:hidden;transition:.18s;display:flex;flex-direction:column}
+.rest:hover{transform:translateY(-3px);box-shadow:var(--sombra)}
+.rest.on{border-color:var(--acc);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 25%,transparent)}
+.rest .banner{height:86px;display:grid;place-items:center;font-size:2.6rem}
+.rest .info{padding:12px 16px}
+.rest .info b{font-family:var(--f-tit);font-size:1.05rem}
+.rest .info small{display:block;color:var(--mute)}
+/* menú */
+.tabs{display:flex;gap:8px;overflow-x:auto;margin-bottom:16px;padding-bottom:4px}
+.tab{border:1px solid var(--line);background:var(--surf);color:var(--mute);border-radius:99px;padding:7px 16px;white-space:nowrap;font-weight:600}
+.tab.on{background:var(--tx);color:var(--bg);border-color:var(--tx)}
+#menu{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+.prod{background:var(--surf);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;transition:.18s}
+.prod:hover{border-color:var(--acc)}
+.prod .foto{height:110px;display:grid;place-items:center;font-size:3.4rem;position:relative}
+.prod .st{position:absolute;top:10px;right:10px;font-size:.74rem;font-weight:700;padding:3px 10px;border-radius:99px;background:rgba(0,0,0,.45);color:#fff;backdrop-filter:blur(4px)}
+.prod .st.poco{background:var(--warn);color:#2b1d00}.prod .st.ago{background:var(--err)}
+.prod .cuerpo{padding:12px 16px 16px;display:flex;flex-direction:column;gap:2px;flex:1}
+.prod h3{font-size:1.02rem}
+.prod .cat{color:var(--mute);font-size:.84rem}
+.prod .pie{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:10px}
+.prod .precio{font-family:var(--f-tit);font-weight:800;font-size:1.1rem}
+.qty{display:flex;align-items:center;gap:10px}
+.qty button{width:34px;height:34px;border-radius:50%;background:var(--surf2);border:1px solid var(--line);font-size:1.15rem}
+.qty button.p{background:var(--grad);color:#fff;border:0}
+.qty button:disabled{opacity:.35;cursor:not-allowed}
+/* carrito (cajón) */
+#velo{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40;opacity:0;pointer-events:none;transition:.2s}
+#velo.on{opacity:1;pointer-events:auto}
+#cajon{position:fixed;top:0;right:0;bottom:0;width:min(420px,100%);background:var(--bg);border-left:1px solid var(--line);z-index:41;transform:translateX(100%);transition:transform .25s;display:flex;flex-direction:column}
+#cajon.on{transform:none}
+#cajon header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}
+#cajon .cuerpo{flex:1;overflow:auto;padding:16px 20px}
+#cajon footer{padding:16px 20px;border-top:1px solid var(--line);background:var(--bg2)}
+.linea{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.total{display:flex;justify-content:space-between;font-family:var(--f-tit);font-size:1.25rem;font-weight:800;margin:4px 0 12px}
+.pagos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.pagos label{border:2px solid var(--line);border-radius:12px;padding:10px 4px;text-align:center;cursor:pointer;font-size:.82rem;background:var(--surf)}
+.pagos label span{display:block;font-size:1.4rem}
+.pagos input{display:none}
+.pagos input:checked+label,.pagos label:has(input:checked){border-color:var(--acc);background:color-mix(in srgb,var(--acc) 12%,var(--surf))}
+/* seguimiento */
+.grid2{display:grid;grid-template-columns:1.5fr 1fr;gap:20px;align-items:start;margin-top:34px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.rail{display:grid;grid-template-columns:repeat(6,1fr);margin-top:22px;position:relative}
+.rail::before{content:"";position:absolute;top:20px;left:8%;right:8%;height:4px;border-radius:4px;background:var(--line)}
+.rail i{position:absolute;top:20px;left:8%;height:4px;border-radius:4px;background:var(--grad);box-shadow:0 0 14px var(--acc);width:0;transition:width .7s}
+.step{text-align:center;position:relative;color:var(--mute);font-size:.78rem}
+.step b{display:grid;place-items:center;width:44px;height:44px;margin:0 auto 6px;border-radius:50%;background:var(--surf2);border:2px solid var(--line);font-size:1.15rem;transition:.3s}
+.step.done b{border-color:var(--acc);background:var(--bg)}
+.step.on{color:var(--tx);font-weight:700}
+.step.on b{background:var(--grad);border-color:transparent;box-shadow:0 0 0 6px color-mix(in srgb,var(--acc) 22%,transparent);animation:pulso 1.8s infinite}
+.step.ok.on b{background:linear-gradient(135deg,#1fc98a,#0f9d6b);animation:none}
+@keyframes pulso{50%{box-shadow:0 0 0 12px color-mix(in srgb,var(--acc) 6%,transparent)}}
+.items{margin-top:12px;color:var(--mute);font-size:.9rem}
+.cancelado{margin-top:18px;padding:12px 14px;border:1px solid var(--err);border-radius:12px;color:var(--err)}
+.lis{list-style:none;padding:0}
+.lis li{padding:10px 0;border-bottom:1px solid var(--line);font-size:.92rem;display:flex;gap:10px;justify-content:space-between}
+.lis li small{color:var(--mute);white-space:nowrap}
+#misPedidos li{cursor:pointer}#misPedidos li:hover b{color:var(--acc)}
+.nuevo{color:var(--tx);font-weight:600}.nuevo::before{content:"●";color:var(--acc2);margin-right:6px}
+/* campana */
+#panelNotifs{position:absolute;right:0;top:46px;width:min(340px,92vw);max-height:60vh;overflow:auto;background:var(--surf);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sombra);padding:8px 16px;z-index:30}
+.estado-api{font-size:.8rem;color:var(--mute);text-align:center;padding:30px 0 10px}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="logo" href="index.html"><i>🍽️</i><span>Pedidos <b>Montería</b></span></a>
+  <div class="buscar hide" id="buscarWrap"><input id="buscar" placeholder="Buscar en el menú..." oninput="pintarMenu()" aria-label="Buscar en el menú"></div>
+  <div class="espacio"></div>
+  <span id="sesion"></span>
+  <div style="position:relative" id="campanaWrap" class="hide">
+    <button class="icono" id="btnCampana" aria-label="Notificaciones" onclick="abrirNotifs()">🔔<span class="badge hide" id="nBadge">0</span></button>
+    <div id="panelNotifs" class="hide"><ul class="lis" id="notifs"></ul></div>
+  </div>
+  <button class="icono hide" id="btnCarrito" aria-label="Ver mi pedido" onclick="abrirCajon(true)">🛒<span class="badge hide" id="cBadge">0</span></button>
+  <button class="icono" id="btnTema" aria-label="Cambiar tema" onclick="alternarTema()">☀️</button>
+</div>
+
+<!-- Acceso -->
+<section id="auth" class="hero">
+  <div>
+    <h1>Tu comida favorita,<br><em>en minutos</em></h1>
+    <p class="lead">Elige un restaurante de Montería, arma tu pedido y sigue cada etapa hasta tu puerta, con avisos en tiempo real.</p>
+    <div class="pasos"><span>📝 Pide</span><span>🔥 Se cocina</span><span>🛵 Un repartidor lo lleva</span><span>🎉 Disfruta</span></div>
+    <div class="platos" aria-hidden="true">
+      <div style="left:2%;top:20px;width:130px;height:130px;font-size:4rem">🍔</div>
+      <div style="left:36%;top:90px;width:150px;height:150px;font-size:4.6rem;animation-delay:-2s">🍕</div>
+      <div style="left:72%;top:10px;width:110px;height:110px;font-size:3.4rem;animation-delay:-4s">🍣</div>
+    </div>
+  </div>
+  <div class="card" style="padding:28px">
+    <h2>Ingresa o crea tu cuenta</h2>
+    <p class="mute" style="margin-bottom:16px">Verás los menús al instante.</p>
+    <input id="nombre" placeholder="Nombre (solo si te registras)" autocomplete="name">
+    <input id="email" type="email" placeholder="Correo electrónico" autocomplete="email">
+    <input id="password" type="password" placeholder="Contraseña (mínimo 6 caracteres)" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()">
+    <div class="row"><button class="btn" onclick="login()">Ingresar</button><button class="btn ghost" onclick="registro()">Crear cuenta</button></div>
+    <p class="msg" id="authMsg"></p>
+    <div class="demo" onclick="demo()">👆 Cuenta de demostración: <b>cliente@monteria.com</b> / cliente123 (clic para llenar)</div>
+    <p class="demo" style="background:none;padding:6px 0 0">¿Eres personal? <a href="admin.html">Panel de administración y reparto</a></p>
+  </div>
+</section>
+
+<!-- Aplicación -->
+<main id="app" class="wrap hide">
+  <div class="sec-t"><h2>Restaurantes</h2><span class="mute" id="nRest"></span></div>
+  <div id="chips" class="rests"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>
+  <div class="sec-t"><h2 id="menuTitulo">Menú</h2></div>
+  <div id="tabs" class="tabs"></div>
+  <div id="menu"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2 id="trackTitulo">Sigue tu pedido</h2>
+      <p id="trackSub" class="mute">Cuando hagas un pedido, aquí verás cada etapa en vivo.</p>
+      <div class="rail" id="rail"><i id="fill"></i></div>
+      <p id="trackItems" class="items"></p>
+      <p id="trackCancelado" class="cancelado hide">Este pedido fue cancelado.</p>
+      <button id="btnCancelar" class="btn danger hide" style="margin-top:16px" onclick="cancelarPedido()">Cancelar pedido</button>
+    </div>
+    <div class="card"><h2>Mis pedidos</h2><ul class="lis" id="misPedidos"></ul></div>
+  </div>
+  <p class="estado-api">Conectado a <span id="apiUrl"></span> · <a href="monitor.html">estado del sistema</a></p>
+</main>
+
+<!-- Cajón del carrito -->
+<div id="velo" onclick="abrirCajon(false)"></div>
+<aside id="cajon" aria-label="Tu pedido">
+  <header><h2 style="font-size:1.2rem">Tu pedido</h2><button class="icono" aria-label="Cerrar" onclick="abrirCajon(false)">✕</button></header>
+  <div class="cuerpo"><div id="carrito"></div></div>
+  <footer>
+    <div class="total"><span>Total</span><span>$<span id="total">0</span></span></div>
+    <input id="direccion" placeholder="Dirección de entrega" autocomplete="street-address">
+    <div class="pagos">
+      <label><input type="radio" name="metodo" value="EFECTIVO" checked><span>💵</span>Efectivo</label>
+      <label><input type="radio" name="metodo" value="TARJETA"><span>💳</span>Tarjeta</label>
+      <label><input type="radio" name="metodo" value="NEQUI"><span>📱</span>Nequi</label>
+    </div>
+    <button id="btnPedir" class="btn full" onclick="hacerPedido()">Realizar pedido</button>
+    <p class="msg" id="pedMsg"></p>
+  </footer>
+</aside>
+<div id="toast"></div>
+
+<script src="js/comun.js"></script>
+<script>
+const ESTADOS = ['CREADO','CONFIRMADO','EN_COCINA','LISTO','EN_CAMINO','ENTREGADO'];
+const PASOS = [['📝','Recibido'],['✅','Confirmado'],['🔥','En cocina'],['📦','Listo'],['🛵','En camino'],['🎉','Entregado']];
+const FONDOS = ['linear-gradient(135deg,#ff9d2e55,#ff5e5b55)','linear-gradient(135deg,#3ddc9755,#5aa9ff55)','linear-gradient(135deg,#b678ff55,#ff5e9a55)','linear-gradient(135deg,#ffd16655,#ff9d2e55)'];
+let user = null, pedidoId = null, rid = null, cat = 'Todo';
+let restaurantes = [], productos = [], carrito = {}, timers = false, notifs = [];
+const api = crearApi(() => user, () => { salir(); });
+
+function demo() { $('email').value = 'cliente@monteria.com'; $('password').value = 'cliente123'; }
+
+/* ---------- sesión ---------- */
+async function login() {
+  try {
+    user = null;
+    user = await api('/usuarios/login', {method: 'POST', body: {email: $('email').value, password: $('password').value}});
+    if (user.rol !== 'CLIENTE') { save('user', null); location.href = 'admin.html'; return; }
+    save('user', user); entrar();
+  } catch (e) { user = null; $('authMsg').textContent = e.message; }
+}
+async function registro() {
+  try {
+    await api('/usuarios/registro', {method: 'POST', body: {nombre: $('nombre').value, email: $('email').value, password: $('password').value}});
+    await login();
+  } catch (e) { $('authMsg').textContent = e.message; }
+}
+function salir() { save('user', null); save('pedido', null); location.reload(); }
+
+function entrar() {
+  $('auth').classList.add('hide'); $('app').classList.remove('hide');
+  ['buscarWrap', 'campanaWrap', 'btnCarrito'].forEach(i => $(i).classList.remove('hide'));
+  $('sesion').innerHTML = `<span class="pill">👋 ${esc(user.nombre)} <button onclick="salir()" style="color:var(--acc);text-decoration:underline">Salir</button></span>`;
+  $('apiUrl').textContent = API;
+  pedidoId = load('pedido');
+  pintarRail(null);
+  cargarRestaurantes(); cargarNotifs(); refrescarPedido(); cargarMisPedidos();
+  if (!timers) { timers = true; setInterval(cargarNotifs, 3000); setInterval(refrescarPedido, 3000); setInterval(cargarMisPedidos, 6000); }
+}
+
+/* ---------- restaurantes y menú ---------- */
+async function cargarRestaurantes() {
+  try { restaurantes = await api('/restaurantes/restaurantes'); }
+  catch (e) { $('chips').innerHTML = '<p class="vacio">No se pudo cargar los restaurantes: ' + esc(e.message) + '</p>'; return; }
+  if (!restaurantes.length) { $('chips').innerHTML = '<p class="vacio">Aún no hay restaurantes disponibles.</p>'; return; }
+  $('nRest').textContent = restaurantes.length + ' disponibles';
+  rid = rid || restaurantes[0].id;
+  pintarChips(); cargarMenu();
+}
+function emojiRest(i) { return ['🍔','🍕','🍣','🥗','🌮','🍗'][i % 6]; }
+function pintarChips() {
+  $('chips').innerHTML = restaurantes.map((r, i) =>
+    `<button class="rest ${r.id === rid ? 'on' : ''}" onclick="elegir(${r.id})">
+      <div class="banner" style="background:${FONDOS[i % 4]}">${emojiRest(i)}</div>
+      <div class="info"><b>${esc(r.nombre)}</b><small>📍 ${esc(r.direccion || '')}</small>${r.telefono ? `<small>📞 ${esc(r.telefono)}</small>` : ''}</div></button>`).join('');
+  const r = restaurantes.find(x => x.id === rid); if (r) $('menuTitulo').textContent = 'Menú de ' + r.nombre;
+}
+function elegir(id) { if (id === rid) return; rid = id; carrito = {}; cat = 'Todo'; $('buscar').value = ''; pintarChips(); cargarMenu(); }
+
+async function cargarMenu() {
+  try { productos = await api('/menu/productos/restaurante/' + rid); } catch (e) { toast(e.message); return; }
+  pintarTabs(); pintarMenu(); pintarCarrito();
+}
+function emoji(c) {
+  c = (c || '').toLowerCase();
+  const m = [['hambur','🍔'],['acompa','🍟'],['bebida','🥤'],['pizza','🍕'],['rollo','🍣'],['entrada','🥟'],['sopa','🍲'],['plato','🍽️'],['pollo','🍗'],['postre','🍰'],['ensalada','🥗']];
+  return (m.find(x => c.includes(x[0])) || [0,'🍴'])[1];
+}
+function pintarTabs() {
+  const cats = ['Todo', ...new Set(productos.map(p => p.categoria).filter(Boolean))];
+  $('tabs').innerHTML = cats.map(c => `<button class="tab ${c === cat ? 'on' : ''}" onclick="filtrar(this.dataset.c)" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+}
+function filtrar(c) { cat = c; pintarTabs(); pintarMenu(); }
+
+function pintarMenu() {
+  const q = $('buscar').value.trim().toLowerCase();
+  const lista = productos.filter(p => (cat === 'Todo' || p.categoria === cat) && (!q || (p.nombre + ' ' + (p.categoria || '')).toLowerCase().includes(q)));
+  $('menu').innerHTML = lista.map((p, i) => {
+    const n = carrito[p.id] || 0, agotado = p.stock <= 0, tope = n >= p.stock;
+    const st = agotado ? '<span class="st ago">Agotado</span>' : p.stock <= 5 ? `<span class="st poco">¡Quedan ${p.stock}!</span>` : '';
+    return `<div class="prod">
+      <div class="foto" style="background:${FONDOS[i % 4]}">${emoji(p.categoria)}${st}</div>
+      <div class="cuerpo"><h3>${esc(p.nombre)}</h3><div class="cat">${esc(p.categoria || '')}</div>
+      <div class="pie"><span class="precio">$${money(p.precio)}</span>
+        <div class="qty">${n ? `<button aria-label="Quitar uno" onclick="cambiar(${p.id},-1)">−</button><b>${n}</b>` : ''}
+        ${agotado ? '' : `<button class="p" aria-label="Agregar uno" ${tope ? 'disabled title="No hay más unidades"' : ''} onclick="cambiar(${p.id},1)">+</button>`}</div></div></div></div>`;
+  }).join('') || '<p class="vacio" style="grid-column:1/-1">No encontramos productos con ese filtro.</p>';
+}
+
+/* ---------- carrito ---------- */
+function abrirCajon(v) { $('cajon').classList.toggle('on', v); $('velo').classList.toggle('on', v); }
+function cambiar(id, d) {
+  const n = (carrito[id] || 0) + d;
+  if (n <= 0) delete carrito[id]; else carrito[id] = n;
+  pintarMenu(); pintarCarrito();
+}
+function pintarCarrito() {
+  let total = 0, unidades = 0;
+  const filas = Object.entries(carrito).map(([id, n]) => {
+    const p = productos.find(x => x.id == id); if (!p) return '';
+    total += p.precio * n; unidades += n;
+    return `<div class="linea"><span>${n} × ${esc(p.nombre)}</span><span>$${money(p.precio * n)}</span></div>`;
+  }).join('');
+  $('carrito').innerHTML = filas || '<p class="vacio">🛒<br>Agrega productos del menú para empezar.</p>';
+  $('total').textContent = money(total);
+  $('cBadge').textContent = unidades; $('cBadge').classList.toggle('hide', !unidades);
+}
+
+async function hacerPedido() {
+  $('pedMsg').textContent = '';
+  const items = Object.entries(carrito).map(([id, cantidad]) => ({producto_id: +id, cantidad}));
+  if (!items.length) { $('pedMsg').textContent = 'Agrega al menos un producto.'; return; }
+  if (!$('direccion').value.trim()) { $('pedMsg').textContent = 'Escribe la dirección de entrega.'; $('direccion').focus(); return; }
+  const b = $('btnPedir'); b.disabled = true; b.textContent = 'Enviando pedido...';
+  try {
+    const d = await api('/pedidos/pedidos', {method: 'POST', body: {
+      restaurante_id: rid, direccion: $('direccion').value.trim(),
+      metodo_pago: document.querySelector('input[name=metodo]:checked').value, items}});
+    pedidoId = d.id; save('pedido', pedidoId);
+    carrito = {}; toast('Pedido #' + d.id + ' enviado 🎉', true);
+    $('direccion').value = ''; abrirCajon(false);
+    cargarMenu(); refrescarPedido(); cargarNotifs(); cargarMisPedidos();
+    $('trackTitulo').scrollIntoView({behavior: 'smooth', block: 'center'});
+  } catch (e) { $('pedMsg').textContent = e.message; toast(e.message); }
+  b.disabled = false; b.textContent = 'Realizar pedido';
+}
+
+/* ---------- seguimiento ---------- */
+function pintarRail(estado) {
+  const i = estado ? ESTADOS.indexOf(estado) : -1;
+  $('rail').querySelectorAll('.step').forEach(e => e.remove());
+  PASOS.forEach((p, k) => {
+    const d = document.createElement('div');
+    d.className = 'step' + (k < i ? ' done' : '') + (k === i ? ' on' : '') + (k === 5 ? ' ok' : '');
+    d.innerHTML = `<b>${p[0]}</b>${p[1]}`;
+    $('rail').appendChild(d);
+  });
+  $('fill').style.width = i > 0 ? `calc((100% - 16%) * ${i / 5})` : '0';
+}
+async function refrescarPedido() {
+  if (!pedidoId) return;
+  try {
+    const p = await api('/pedidos/pedidos/' + pedidoId);
+    const cancelado = p.estado === 'CANCELADO';
+    $('trackTitulo').textContent = 'Pedido #' + p.id + ' por $' + money(p.total);
+    $('trackSub').textContent = 'Entrega en ' + p.direccion;
+    $('trackItems').textContent = (p.items || []).map(i => i.cantidad + ' × ' + (i.nombre || 'Producto ' + i.producto_id)).join(' · ');
+    $('rail').classList.toggle('hide', cancelado);
+    $('trackCancelado').classList.toggle('hide', !cancelado);
+    $('btnCancelar').classList.toggle('hide', !['CREADO', 'CONFIRMADO'].includes(p.estado));
+    if (!cancelado) pintarRail(p.estado);
+  } catch (e) {}
+}
+async function cancelarPedido() {
+  if (!pedidoId || !confirm('¿Seguro que quieres cancelar el pedido #' + pedidoId + '?')) return;
+  try {
+    await api('/pedidos/pedidos/' + pedidoId + '/cancelar', {method: 'POST'});
+    toast('Pedido #' + pedidoId + ' cancelado', true);
+    refrescarPedido(); cargarNotifs(); cargarMisPedidos(); cargarMenu();
+  } catch (e) { toast(e.message); }
+}
+async function cargarMisPedidos() {
+  try {
+    const l = await api('/pedidos/pedidos?limit=8');
+    $('misPedidos').innerHTML = l.map(p =>
+      `<li onclick="verPedido(${p.id})"><span><b>#${p.id}</b> <small>$${money(p.total)}</small></span><span class="tag ${p.estado === 'ENTREGADO' ? 'ok' : p.estado === 'CANCELADO' ? 'off' : ''}">${esc(p.estado.replace('_', ' ').toLowerCase())}</span></li>`
+    ).join('') || '<li style="cursor:default">Aún no has hecho pedidos.</li>';
+  } catch (e) {}
+}
+function verPedido(id) { pedidoId = id; save('pedido', id); refrescarPedido(); $('trackTitulo').scrollIntoView({behavior: 'smooth', block: 'center'}); }
+
+/* ---------- notificaciones ---------- */
+let ultimaNotif = 0;
+async function cargarNotifs() {
+  try {
+    notifs = await api('/notificaciones/notificaciones/usuario/' + user.id);
+    const sinLeer = notifs.filter(n => !n.leido);
+    $('nBadge').textContent = sinLeer.length; $('nBadge').classList.toggle('hide', !sinLeer.length);
+    if (ultimaNotif && sinLeer.length && sinLeer[0].id > ultimaNotif) toast('🔔 ' + sinLeer[0].mensaje, true);
+    if (notifs.length) ultimaNotif = Math.max(ultimaNotif, ...notifs.map(n => n.id));
+    $('notifs').innerHTML = notifs.map(x => `<li><span class="${x.leido ? '' : 'nuevo'}">${esc(x.mensaje)}</span></li>`).join('') || '<li>Aún no tienes notificaciones.</li>';
+  } catch (e) {}
+}
+async function abrirNotifs() {
+  const p = $('panelNotifs'); p.classList.toggle('hide');
+  if (!p.classList.contains('hide') && notifs.some(n => !n.leido)) {
+    try { await api('/notificaciones/notificaciones/usuario/' + user.id + '/leidas', {method: 'PATCH'}); setTimeout(cargarNotifs, 1500); } catch (e) {}
+  }
+}
+document.addEventListener('click', e => { if (!e.target.closest('#campanaWrap')) $('panelNotifs').classList.add('hide'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') abrirCajon(false); });
+
+user = load('user');
+if (user && user.token && user.rol === 'CLIENTE') entrar(); else { user = null; save('user', null); }
+</script>
+</body>
+</html>

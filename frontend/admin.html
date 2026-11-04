@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel del personal · Pedidos Montería</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilo.css">
+<style>.vista{min-width:0}.vista .card{box-shadow:none}</style>
+</head>
+<body>
+<div class="top">
+  <a class="logo" href="admin.html"><i>🍽️</i><span id="titulo">Panel <b>del personal</b></span></a>
+  <div class="espacio"></div>
+  <span id="stats"></span>
+  <a class="pill hide" id="lnkMonitor" href="monitor.html">📈 Monitoreo</a>
+  <a class="pill" href="index.html">🛍️ Tienda</a>
+  <button class="icono" id="btnTema" aria-label="Cambiar tema" onclick="alternarTema()">☀️</button>
+</div>
+
+<section id="login" class="login-wrap">
+  <div class="card" style="padding:28px">
+    <h2 style="font-size:1.5rem">Acceso del personal</h2>
+    <p class="mute" style="margin-bottom:14px">Administradores y repartidores.</p>
+    <input id="email" type="email" placeholder="Correo electrónico" autocomplete="username">
+    <input id="password" type="password" placeholder="Contraseña" autocomplete="current-password" onkeydown="if(event.key==='Enter')entrar()">
+    <button class="btn full" onclick="entrar()">Ingresar</button>
+    <p class="msg" id="loginMsg"></p>
+    <p class="mute" style="font-size:.84rem;margin-top:10px">Demo: admin@monteria.com / admin123 · carlos@monteria.com / reparto123</p>
+  </div>
+</section>
+
+<div id="panel" class="hide shell">
+  <nav id="nav" class="side-nav"></nav>
+  <div class="contenido">
+  <div class="kpis hide" id="kpis"></div>
+
+  <div id="v-pedidos" class="vista hide"><div class="board" id="board"></div></div>
+
+  <div id="v-rest" class="vista hide">
+    <div class="card">
+      <h3 class="t" id="restTitulo">Nuevo restaurante</h3>
+      <div class="form">
+        <div><label>Nombre</label><input id="rNombre" maxlength="100"></div>
+        <div><label>Dirección</label><input id="rDir" maxlength="200"></div>
+        <div><label>Teléfono</label><input id="rTel" maxlength="30"></div>
+        <div style="display:flex;gap:8px"><button class="btn" onclick="guardarRest()">Guardar</button>
+          <button class="btn ghost" onclick="limpiarRest()">Limpiar</button></div>
+      </div>
+      <div class="scroll"><table><thead><tr><th>Nombre</th><th>Dirección</th><th>Teléfono</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="restBody"></tbody></table></div>
+    </div>
+  </div>
+
+  <div id="v-menu" class="vista hide">
+    <div class="card">
+      <div class="form" style="grid-template-columns:minmax(200px,320px)">
+        <div><label>Restaurante</label><select id="mRest" onchange="cargarMenu()"></select></div>
+      </div>
+      <h3 class="t" id="menuTitulo">Nuevo producto</h3>
+      <div class="form">
+        <div><label>Nombre</label><input id="pNombre" maxlength="100"></div>
+        <div><label>Categoría</label><input id="pCat" maxlength="50" placeholder="Hamburguesas, Bebidas..."></div>
+        <div><label>Precio ($)</label><input id="pPrecio" type="number" min="1" step="100"></div>
+        <div><label>Stock</label><input id="pStock" type="number" min="0" step="1" value="0"></div>
+        <div style="display:flex;gap:8px"><button class="btn" onclick="guardarProd()">Guardar</button>
+          <button class="btn ghost" onclick="limpiarProd()">Limpiar</button></div>
+      </div>
+      <div class="scroll"><table><thead><tr><th>Producto</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="menuBody"></tbody></table></div>
+    </div>
+  </div>
+
+  <div id="v-equipo" class="vista hide">
+    <div class="card">
+      <h3 class="t">Crear usuario</h3>
+      <div class="form">
+        <div><label>Nombre</label><input id="uNombre" maxlength="100"></div>
+        <div><label>Correo</label><input id="uEmail" type="email"></div>
+        <div><label>Contraseña (mín. 6)</label><input id="uPass" type="text" autocomplete="off"></div>
+        <div><label>Rol</label><select id="uRol"><option>REPARTIDOR</option><option>ADMIN</option><option>CLIENTE</option></select></div>
+        <div><button class="btn" onclick="crearUsuario()">Crear</button></div>
+      </div>
+      <div class="scroll"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th></tr></thead>
+        <tbody id="equipoBody"></tbody></table></div>
+    </div>
+  </div>
+
+  <div id="v-reparto" class="vista hide">
+    <div class="card" style="margin-bottom:16px">
+      <h3 class="t">Estado de reparto</h3>
+      <p id="dispTexto" style="color:var(--mute);margin-bottom:10px">Comprueba tu disponibilidad para recibir pedidos.</p>
+      <button class="btn" id="btnDisponibilidad" onclick="alternarDisponibilidad()">Activar disponibilidad</button>
+    </div>
+    <h3 class="t">Pedidos listos para aceptar</h3>
+    <div class="lista" id="disponibles"></div>
+    <h3 class="t" style="margin-top:22px">Mis domicilios activos</h3>
+    <div class="lista" id="reparto"></div>
+    <h3 class="t" style="margin-top:22px">Notificaciones recientes</h3>
+    <div class="card"><ul id="notifsReparto" style="list-style:none;padding:0;color:var(--mute)"></ul></div>
+  </div>
+</div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="js/comun.js"></script>
+<script>
+const COLS = [
+  ['CREADO', 'Nuevos', ''], ['CONFIRMADO', 'Confirmados', ''], ['EN_COCINA', 'En cocina', 'cocina'],
+  ['LISTO', 'Listos para reparto', ''], ['EN_CAMINO', 'En camino', 'ruta']
+];
+const SIG = {CREADO: 'CONFIRMADO', CONFIRMADO: 'EN_COCINA', EN_COCINA: 'LISTO'};
+const ACCION = {
+  CREADO: 'Confirmar pedido', CONFIRMADO: 'Pasar a cocina', EN_COCINA: 'Marcar listo',
+  LISTO: 'Salir a ruta', EN_CAMINO: 'Marcar entregado'
+};
+
+let staff = null, vista = null, repartidores = [], restaurantes = [], productos = [];
+let editRest = null, editProd = null, disponibleActual = false, notifUltimoId = 0, disponibleCargada = false;
+const detalles = {};   // pedido_id -> detalle (cache para la vista del repartidor)
+
+const j = crearApi(() => staff, () => salir());
+
+/* ------------------------------------------------------------ sesión */
+async function entrar() {
+  $('loginMsg').textContent = '';
+  try {
+    staff = null;
+    const u = await j('/usuarios/login', {method: 'POST', body: {email: $('email').value, password: $('password').value}});
+    if (u.rol === 'CLIENTE') { $('loginMsg').textContent = 'Esta cuenta es de cliente. Usa la página de pedidos (index.html).'; return; }
+    staff = u; save('staff', u); iniciar();
+  } catch (e) { staff = null; $('loginMsg').textContent = e.message; }
+}
+function salir() { save('staff', null); location.reload(); }
+
+function iniciar() {
+  $('login').classList.add('hide'); $('panel').classList.remove('hide');
+  const esAdmin = staff.rol === 'ADMIN';
+  $('titulo').innerHTML = esAdmin ? 'Panel <b>de administración</b>' : 'Mis <b>domicilios</b>';
+  $('lnkMonitor').classList.toggle('hide', !esAdmin);
+  $('stats').innerHTML = `<span class="pill">${esAdmin ? '🛠️' : '🛵'} ${esc(staff.nombre)} <button onclick="salir()" style="color:var(--acc);text-decoration:underline">Salir</button></span>`;
+  const tabs = esAdmin
+    ? [['pedidos', '📋 Pedidos'], ['rest', '🏪 Restaurantes'], ['menu', '🍔 Menú'], ['equipo', '👥 Equipo']]
+    : [['reparto', '🛵 Mis domicilios']];
+  $('nav').innerHTML = tabs.map(([k, t]) => `<button data-v="${k}" onclick="ir('${k}')">${t}</button>`).join('');
+  ir(tabs[0][0]);
+  setInterval(() => { if (vista === 'pedidos') cargarTablero(); if (vista === 'reparto') cargarReparto(); }, 3000);
+}
+function ir(v) {
+  vista = v;
+  ['pedidos', 'rest', 'menu', 'equipo', 'reparto'].forEach(k => $('v-' + k).classList.toggle('hide', k !== v));
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  $('kpis').classList.toggle('hide', v !== 'pedidos');
+  if (v === 'pedidos') cargarTablero();
+  if (v === 'rest') cargarRest();
+  if (v === 'menu') cargarSelectorMenu();
+  if (v === 'equipo') cargarEquipo();
+  if (v === 'reparto') cargarReparto();
+}
+
+/* ------------------------------------------------------------ tablero de pedidos */
+function minutos(p) {
+  const t = new Date(p.created_at);
+  return isNaN(t) ? null : Math.max(0, Math.floor((Date.now() - t) / 60000));
+}
+async function cargarTablero() {
+  const board = $('board');
+  const a = document.activeElement;
+  if (a && a.tagName === 'SELECT' && board.contains(a)) return;   // no cerrar el desplegable mientras se usa
+  let pedidos, doms, resumen;
+  try {
+    [pedidos, doms, resumen, repartidores] = await Promise.all([
+      j('/pedidos/pedidos?activos=true'), j('/domicilios/domicilios'), j('/pedidos/pedidos/resumen'), j('/usuarios/repartidores')]);
+  } catch (e) {
+    board.innerHTML = '<p class="vacio" style="grid-column:1/-1">No se pudo cargar: ' + esc(e.message) + '. Revisa que los servicios estén corriendo.</p>';
+    return;
+  }
+  $('kpis').classList.remove('hide');
+  $('kpis').innerHTML = `<div class="kpi"><small>Pedidos activos</small><b>${resumen.activos}</b></div>
+    <div class="kpi"><small>Entregados hoy</small><b style="color:var(--ok)">${resumen.entregados_hoy}</b></div>
+    <div class="kpi"><small>Cancelados hoy</small><b style="color:var(--err)">${resumen.cancelados_hoy}</b></div>
+    <div class="kpi"><small>Repartidores disponibles</small><b>${repartidores.filter(r => r.disponible).length}/${repartidores.length}</b></div>`;
+  const dom = {}; doms.forEach(d => dom[d.pedido_id] = d);
+  const nombreRep = id => (repartidores.find(r => r.id === id) || {}).nombre;
+
+  board.innerHTML = COLS.map(([est, titulo, clase]) => {
+    const lista = pedidos.filter(p => p.estado === est);
+    const tarjetas = lista.map(p => {
+      const m = minutos(p), tarde = m !== null && m >= 15, d = dom[p.id];
+      let rep = '';
+      if (est === 'LISTO' || est === 'EN_CAMINO') {
+        if (d && d.repartidor_id) rep = `<div class="rep">🛵 ${esc(nombreRep(d.repartidor_id) || 'Repartidor #' + d.repartidor_id)}</div>`;
+        else rep = '<div class="rep sin">Sin repartidor asignado</div>';
+        if (est === 'LISTO' && d && repartidores.length) {
+          rep += `<select onchange="asignar(${d.id}, this.value)"><option value="">${d.repartidor_id ? 'Cambiar repartidor...' : 'Asignar repartidor...'}</option>` +
+                 repartidores.map(r => `<option value="${r.id}">${esc(r.nombre)}${r.disponible ? ' (disponible)' : ' (fuera de servicio)'}</option>`).join('') + '</select>';
+        }
+      }
+      return `<div class="ped">
+        <div class="top2"><span class="id">#${p.id}</span><span class="t ${tarde ? 'tarde' : ''}">${m === null ? '' : 'hace ' + m + ' min'}</span></div>
+        <div class="dir">${esc(p.direccion || 'Sin dirección')}</div>
+        <div class="mon">$${money(p.total)}${p.unidades ? ' - ' + p.unidades + ' productos' : ''}</div>
+        ${rep}
+        <button class="go ${est === 'EN_CAMINO' ? 'ruta' : ''}" onclick="avanzar(${p.id},'${est}',this)">${ACCION[est]}</button>
+        ${est !== 'EN_CAMINO' ? `<button class="cancel" onclick="cancelar(${p.id})">Cancelar pedido</button>` : ''}
+      </div>`;
+    }).join('') || '<p class="vacio">Sin pedidos</p>';
+    return `<section class="col ${clase}"><h2>${titulo}<span>${lista.length}</span></h2>${tarjetas}</section>`;
+  }).join('');
+}
+
+async function avanzar(id, estado, btn) {
+  btn.disabled = true;
+  try {
+    if (SIG[estado]) {
+      await j(`/pedidos/pedidos/${id}/estado`, {method: 'PATCH', body: {estado: SIG[estado]}});
+    } else {
+      // LISTO y EN_CAMINO los mueve el servicio de domicilios (mantiene sincronizado al repartidor)
+      let d;
+      try { d = await j('/domicilios/domicilios/pedido/' + id); }
+      catch (e) { d = await j('/domicilios/domicilios', {method: 'POST', body: {pedido_id: id}}); }  // si no se creó, se crea ahora
+      if (estado === 'LISTO' && !d.repartidor_id) throw new Error('Asigna un repartidor antes de enviar el pedido #' + id);
+      await j(`/domicilios/domicilios/${d.id}/avanzar`, {method: 'PATCH'});
+    }
+  } catch (e) { toast(e.message); }
+  cargarTablero();
+}
+async function asignar(did, rid) {
+  if (!rid) return;
+  try { await j(`/domicilios/domicilios/${did}/asignar`, {method: 'PATCH', body: {repartidor_id: +rid}}); toast('Repartidor asignado', true); }
+  catch (e) { toast(e.message); }
+  document.activeElement.blur(); cargarTablero();
+}
+async function cancelar(id) {
+  if (!confirm('¿Cancelar el pedido #' + id + '? Se devolverá el stock y se avisará al cliente.')) return;
+  try { await j(`/pedidos/pedidos/${id}/cancelar`, {method: 'POST'}); toast('Pedido #' + id + ' cancelado', true); }
+  catch (e) { toast(e.message); }
+  cargarTablero();
+}
+
+/* ------------------------------------------------------------ restaurantes */
+async function cargarRest() {
+  try { restaurantes = await j('/restaurantes/admin/restaurantes'); } catch (e) { toast(e.message); return; }
+  $('restBody').innerHTML = restaurantes.map(r => `<tr>
+    <td>${esc(r.nombre)}</td><td>${esc(r.direccion)}</td><td>${esc(r.telefono || '')}</td>
+    <td><span class="tag ${r.activo ? 'ok' : 'off'}">${r.activo ? 'Activo' : 'Inactivo'}</span></td>
+    <td class="acc"><button class="btn ghost sm" onclick="editarRest(${r.id})">Editar</button>
+      <button class="btn ghost sm" onclick="alternarRest(${r.id})">${r.activo ? 'Desactivar' : 'Activar'}</button></td></tr>`).join('')
+    || '<tr><td colspan="5" class="vacio">Aún no hay restaurantes</td></tr>';
+}
+function limpiarRest() { editRest = null; $('rNombre').value = $('rDir').value = $('rTel').value = ''; $('restTitulo').textContent = 'Nuevo restaurante'; }
+function editarRest(id) {
+  const r = restaurantes.find(x => x.id === id); editRest = id;
+  $('rNombre').value = r.nombre; $('rDir').value = r.direccion; $('rTel').value = r.telefono || '';
+  $('restTitulo').textContent = 'Editando: ' + r.nombre; $('rNombre').focus();
+}
+async function guardarRest() {
+  const actual = editRest ? restaurantes.find(x => x.id === editRest) : null;
+  const body = {nombre: $('rNombre').value.trim(), direccion: $('rDir').value.trim(), telefono: $('rTel').value.trim() || null,
+                activo: actual ? !!actual.activo : true};
+  if (!body.nombre) { toast('Escribe el nombre'); return; }
+  try {
+    await j(editRest ? '/restaurantes/restaurantes/' + editRest : '/restaurantes/restaurantes',
+            {method: editRest ? 'PUT' : 'POST', body});
+    toast('Restaurante guardado', true); limpiarRest(); cargarRest();
+  } catch (e) { toast(e.message); }
+}
+async function alternarRest(id) {
+  const r = restaurantes.find(x => x.id === id);
+  try {
+    await j('/restaurantes/restaurantes/' + id, {method: 'PUT',
+      body: {nombre: r.nombre, direccion: r.direccion, telefono: r.telefono, activo: !r.activo}});
+    cargarRest();
+  } catch (e) { toast(e.message); }
+}
+
+/* ------------------------------------------------------------ menú */
+async function cargarSelectorMenu() {
+  try { restaurantes = await j('/restaurantes/admin/restaurantes'); } catch (e) { toast(e.message); return; }
+  const previo = $('mRest').value;
+  $('mRest').innerHTML = restaurantes.map(r => `<option value="${r.id}">${esc(r.nombre)}${r.activo ? '' : ' (inactivo)'}</option>`).join('');
+  if (previo) $('mRest').value = previo;
+  cargarMenu();
+}
+async function cargarMenu() {
+  const rid = $('mRest').value;
+  if (!rid) { $('menuBody').innerHTML = '<tr><td colspan="6" class="vacio">Primero crea un restaurante</td></tr>'; return; }
+  try { productos = await j('/menu/admin/productos/restaurante/' + rid); } catch (e) { toast(e.message); return; }
+  $('menuBody').innerHTML = productos.map(p => `<tr>
+    <td>${esc(p.nombre)}</td><td>${esc(p.categoria || '')}</td><td>$${money(p.precio)}</td>
+    <td>${p.stock <= 5 ? `<span class="tag off">${p.stock}</span>` : p.stock}</td>
+    <td><span class="tag ${p.activo ? 'ok' : 'off'}">${p.activo ? 'Disponible' : 'Oculto'}</span></td>
+    <td class="acc"><button class="btn ghost sm" onclick="editarProd(${p.id})">Editar</button>
+      <button class="btn ghost sm" onclick="reponer(${p.id})">+10 stock</button>
+      <button class="btn ghost sm" onclick="alternarProd(${p.id})">${p.activo ? 'Ocultar' : 'Mostrar'}</button></td></tr>`).join('')
+    || '<tr><td colspan="6" class="vacio">Este restaurante aún no tiene productos</td></tr>';
+}
+function limpiarProd() {
+  editProd = null; $('pNombre').value = $('pCat').value = $('pPrecio').value = ''; $('pStock').value = 0;
+  $('menuTitulo').textContent = 'Nuevo producto';
+}
+function editarProd(id) {
+  const p = productos.find(x => x.id === id); editProd = id;
+  $('pNombre').value = p.nombre; $('pCat').value = p.categoria || ''; $('pPrecio').value = p.precio; $('pStock').value = p.stock;
+  $('menuTitulo').textContent = 'Editando: ' + p.nombre; $('pNombre').focus();
+}
+async function guardarProd() {
+  const actual = editProd ? productos.find(x => x.id === editProd) : null;
+  const body = {nombre: $('pNombre').value.trim(), categoria: $('pCat').value.trim() || null,
+                precio: parseFloat($('pPrecio').value), stock: parseInt($('pStock').value || '0', 10),
+                activo: actual ? !!actual.activo : true};
+  if (!body.nombre || !(body.precio > 0) || body.stock < 0 || isNaN(body.stock)) { toast('Revisa nombre, precio (mayor que 0) y stock'); return; }
+  try {
+    if (editProd) await j('/menu/productos/' + editProd, {method: 'PUT', body});
+    else await j('/menu/productos', {method: 'POST', body: {...body, restaurante_id: +$('mRest').value}});
+    toast('Producto guardado', true); limpiarProd(); cargarMenu();
+  } catch (e) { toast(e.message); }
+}
+async function reponer(id) {
+  try { await j(`/menu/productos/${id}/reponer`, {method: 'PATCH', body: {cantidad: 10}}); cargarMenu(); } catch (e) { toast(e.message); }
+}
+async function alternarProd(id) {
+  const p = productos.find(x => x.id === id);
+  try {
+    await j('/menu/productos/' + id, {method: 'PUT',
+      body: {nombre: p.nombre, categoria: p.categoria, precio: Number(p.precio), stock: p.stock, activo: !p.activo}});
+    cargarMenu();
+  } catch (e) { toast(e.message); }
+}
+
+/* ------------------------------------------------------------ equipo */
+async function cargarEquipo() {
+  try {
+    const l = await j('/usuarios/admin/usuarios');
+    $('equipoBody').innerHTML = l.map(u => `<tr><td>${esc(u.nombre)}</td><td>${esc(u.email)}</td><td><span class="tag">${esc(u.rol)}</span></td></tr>`).join('');
+  } catch (e) { toast(e.message); }
+}
+async function crearUsuario() {
+  try {
+    await j('/usuarios/admin/usuarios', {method: 'POST', body: {
+      nombre: $('uNombre').value, email: $('uEmail').value, password: $('uPass').value, rol: $('uRol').value}});
+    toast('Usuario creado', true); $('uNombre').value = $('uEmail').value = $('uPass').value = ''; cargarEquipo();
+  } catch (e) { toast(e.message); }
+}
+
+/* ------------------------------------------------------------ vista del repartidor */
+async function cargarDisponibilidad() {
+  try {
+    const yo = await j('/usuarios/repartidores/yo');
+    disponibleActual = !!(yo && yo.disponible);
+    pintarDisponibilidad();
+  } catch (e) {
+    $('dispTexto').textContent = 'No se pudo consultar la disponibilidad.';
+  }
+}
+function pintarDisponibilidad() {
+  $('dispTexto').textContent = disponibleActual
+    ? 'Estás DISPONIBLE. Los pedidos listos pueden asignarse a ti.'
+    : 'Estás FUERA DE SERVICIO. Activa la disponibilidad para recibir pedidos.';
+  $('btnDisponibilidad').textContent = disponibleActual ? 'Ponerme fuera de servicio' : 'Activar disponibilidad';
+  $('btnDisponibilidad').classList.toggle('ghost', disponibleActual);
+}
+async function alternarDisponibilidad() {
+  const nuevo = !disponibleActual;
+  try {
+    await j('/usuarios/repartidores/disponibilidad', {method:'PATCH', body:{disponible:nuevo}});
+    disponibleActual = nuevo; pintarDisponibilidad();
+    toast(nuevo ? 'Ya estás disponible para recibir domicilios' : 'Disponibilidad desactivada', true);
+    cargarReparto();
+  } catch (e) { toast(e.message); }
+}
+async function cargarNotificacionesReparto() {
+  try {
+    const ns = await j('/notificaciones/notificaciones/usuario/' + staff.id);
+    $('notifsReparto').innerHTML = ns.map(n => `<li style="padding:8px 0;border-bottom:1px solid var(--line)">${esc(n.mensaje)} <small style="display:block">${esc(n.created_at || '')}</small></li>`).join('')
+      || '<li>No tienes notificaciones todavía.</li>';
+    const nuevas = ns.filter(n => !n.leido && n.id > notifUltimoId);
+    if (notifUltimoId && nuevas.length) toast(nuevas[0].mensaje, true);
+    if (ns.length) notifUltimoId = Math.max(notifUltimoId, ...ns.map(n => n.id));
+  } catch (e) {}
+}
+async function cargarReparto() {
+  if (!disponibleCargada) { await cargarDisponibilidad(); disponibleCargada = true; }
+  let doms = [], libres = [];
+  try {
+    [doms, libres] = await Promise.all([
+      j('/domicilios/domicilios/repartidor/' + staff.id),
+      j('/domicilios/domicilios/disponibles')
+    ]);
+  } catch (e) { $('reparto').innerHTML = '<p class="vacio">' + esc(e.message) + '</p>'; }
+  await Promise.all([...doms, ...libres].filter(d => !detalles[d.pedido_id]).map(async d => {
+    try { detalles[d.pedido_id] = await j('/pedidos/pedidos/' + d.pedido_id); } catch (e) {}
+  }));
+  $('disponibles').innerHTML = libres.map(d => {
+    const p = detalles[d.pedido_id] || {};
+    return `<div class="ped">
+      <div class="top2"><span class="id">Pedido #${d.pedido_id}</span><span class="tag ok">Disponible</span></div>
+      <div class="dir">📍 ${esc(p.direccion || 'Dirección pendiente')}</div>
+      <div class="mon">$${money(p.total || 0)}</div>
+      <div class="dir">${(p.items || []).map(i => i.cantidad + ' × ' + esc(i.nombre || 'Producto ' + i.producto_id)).join(' · ')}</div>
+      <button class="go" ${disponibleActual ? '' : 'disabled'} onclick="aceptarDomicilio(${d.id},this)">Aceptar domicilio</button>
+    </div>`;
+  }).join('') || '<p class="vacio" style="grid-column:1/-1">No hay pedidos pendientes de repartidor.</p>';
+  $('reparto').innerHTML = doms.map(d => {
+    const p = detalles[d.pedido_id] || {}, enRuta = d.estado === 'EN_RUTA';
+    return `<div class="ped">
+      <div class="top2"><span class="id">Pedido #${d.pedido_id}</span><span class="t">${enRuta ? 'En ruta' : 'Por recoger'}</span></div>
+      <div class="dir">📍 ${esc(p.direccion || '')}</div>
+      <div class="mon">$${money(p.total || 0)}</div>
+      <div class="dir">${(p.items || []).map(i => i.cantidad + ' × ' + esc(i.nombre || 'Producto ' + i.producto_id)).join(' · ')}</div>
+      <button class="go ${enRuta ? 'ruta' : ''}" onclick="avanzarReparto(${d.id}, this)">${enRuta ? 'Marcar entregado' : 'Recogido: salir a ruta'}</button>
+    </div>`;
+  }).join('') || '<p class="vacio" style="grid-column:1/-1">No tienes domicilios asignados por ahora.</p>';
+  await cargarNotificacionesReparto();
+}
+async function aceptarDomicilio(did, btn) {
+  btn.disabled = true;
+  try {
+    await j(`/domicilios/domicilios/${did}/aceptar`, {method:'PATCH'});
+    toast('Domicilio aceptado. Ya aparece en tus domicilios.', true);
+  } catch (e) { toast(e.message); }
+  cargarReparto();
+}
+async function avanzarReparto(did, btn) {
+  btn.disabled = true;
+  try { await j(`/domicilios/domicilios/${did}/avanzar`, {method: 'PATCH'}); }
+  catch (e) { toast(e.message); }
+  cargarReparto();
+}
+
+staff = load('staff');
+if (staff && staff.token) iniciar(); else staff = null;
+</script>
+</body>
+</html>

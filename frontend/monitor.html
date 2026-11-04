@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitoreo · Pedidos Montería</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilo.css">
+<style>
+.wrap{max-width:1250px;margin:0 auto;padding:24px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.tile{background:var(--surf);border:1px solid var(--line);border-left:5px solid var(--mute);border-radius:var(--r);padding:14px 16px}
+.tile.ok{border-left-color:var(--ok)}.tile.caido{border-left-color:var(--err)}.tile.degradado{border-left-color:var(--warn)}
+.tile h3{display:flex;justify-content:space-between;align-items:center;font-size:1rem}
+.tile .num{display:flex;gap:14px;white-space:nowrap;margin-top:8px;font-size:.82rem;color:var(--mute)}
+.tile .num b{display:block;color:var(--tx);font-family:var(--f-tit);font-size:1.15rem}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--mute);display:inline-block;margin-right:8px}
+.ok .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}.caido .dot{background:var(--err)}.degradado .dot{background:var(--warn)}
+.barra{display:flex;height:6px;border-radius:99px;overflow:hidden;background:var(--surf2);margin-top:10px}
+.barra i{display:block}
+.dos{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px}
+@media(max-width:900px){.dos{grid-template-columns:1fr}}
+.log{font-family:ui-monospace,Consolas,monospace;font-size:.78rem;border-bottom:1px solid var(--line);padding:6px 0;word-break:break-word}
+.log .WARNING{color:var(--warn)}.log .ERROR{color:var(--err)}
+.cabecera{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.cabecera h1{font-size:1.5rem}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="logo" href="index.html"><i>🍽️</i><span>Pedidos <b>Montería</b></span></a>
+  <div class="espacio"></div>
+  <a class="pill" href="admin.html">🛠️ Panel</a>
+  <a class="pill" id="lnkDocs" href="#" target="_blank" rel="noopener">📘 Swagger</a>
+  <button class="icono" id="btnTema" aria-label="Cambiar tema" onclick="alternarTema()">☀️</button>
+</div>
+
+<section id="login" class="login-wrap hide">
+  <div class="card" style="padding:28px">
+    <h2 style="font-size:1.4rem">Monitoreo del sistema</h2>
+    <p class="mute" style="margin-bottom:14px">Solo administradores.</p>
+    <input id="email" type="email" placeholder="Correo" value="admin@monteria.com">
+    <input id="password" type="password" placeholder="Contraseña" onkeydown="if(event.key==='Enter')entrar()">
+    <button class="btn full" onclick="entrar()">Ingresar</button>
+    <p class="msg" id="loginMsg"></p>
+  </div>
+</section>
+
+<main id="panel" class="wrap hide">
+  <div class="cabecera"><h1>Estado del sistema</h1><span class="tag" id="global">…</span>
+    <span class="mute" id="actualizado"></span><div class="espacio"></div>
+    <button class="btn ghost sm" onclick="salir()">Cerrar sesión</button></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="tiles" id="tiles"></div>
+  <div class="dos">
+    <div class="card"><h2>Mensajería (RabbitMQ)</h2><div id="broker" class="mute">…</div></div>
+    <div class="card"><h2>Rutas más usadas</h2><div class="scroll"><table><thead><tr><th>Ruta</th><th>Peticiones</th><th>ms medio</th><th>Errores</th></tr></thead><tbody id="rutas"></tbody></table></div></div>
+  </div>
+  <div class="card" style="margin-top:18px"><h2>Avisos y errores recientes <small class="mute">(el id de traza permite seguir una petición en los logs de todos los servicios)</small></h2><div id="logs"></div></div>
+</main>
+<div id="toast"></div>
+
+<script src="js/comun.js"></script>
+<script>
+let staff = load('staff'), timer = null;
+const j = crearApi(() => staff, () => salir());
+$('lnkDocs').href = API + '/docs';
+
+async function entrar() {
+  try {
+    staff = null;
+    const u = await j('/usuarios/login', {method: 'POST', body: {email: $('email').value, password: $('password').value}});
+    if (u.rol !== 'ADMIN') { $('loginMsg').textContent = 'Solo los administradores ven el monitoreo.'; return; }
+    staff = u; save('staff', u); iniciar();
+  } catch (e) { staff = null; $('loginMsg').textContent = e.message; }
+}
+function salir() { save('staff', null); location.reload(); }
+function iniciar() { $('login').classList.add('hide'); $('panel').classList.remove('hide'); cargar(); timer = setInterval(cargar, 4000); }
+
+function dur(s) { return s >= 3600 ? Math.floor(s / 3600) + ' h ' + Math.floor(s % 3600 / 60) + ' min' : s >= 60 ? Math.floor(s / 60) + ' min' : s + ' s'; }
+
+async function cargar() {
+  let d;
+  try { d = await j('/monitor'); }
+  catch (e) { $('global').textContent = 'sin conexión'; $('global').className = 'tag off'; $('actualizado').textContent = e.message; return; }
+  const sv = d.servicios || [];
+  const caidos = sv.filter(s => s.estado !== 'ok').length;
+  $('global').textContent = caidos ? caidos + ' servicio(s) con problemas' : 'Todo operativo';
+  $('global').className = 'tag ' + (caidos ? 'off' : 'ok');
+  $('actualizado').textContent = 'Actualizado ' + new Date().toLocaleTimeString('es-CO');
+  const m = s => s.metricas || {};
+  const tot = sv.reduce((a, s) => a + (m(s).peticiones || 0), 0);
+  const err5 = sv.reduce((a, s) => a + ((m(s).por_clase || {})['5xx'] || 0), 0);
+  const err4 = sv.reduce((a, s) => a + ((m(s).por_clase || {})['4xx'] || 0), 0);
+  const lat = sv.filter(s => m(s).peticiones).map(s => m(s).latencia_media_ms);
+  $('kpis').innerHTML = `
+    <div class="kpi"><small>Servicios activos</small><b style="color:${caidos ? 'var(--err)' : 'var(--ok)'}">${sv.length - caidos}/${sv.length}</b></div>
+    <div class="kpi"><small>Peticiones totales</small><b>${money(tot)}</b></div>
+    <div class="kpi"><small>Errores de cliente (4xx)</small><b style="color:var(--warn)">${money(err4)}</b></div>
+    <div class="kpi"><small>Errores de servidor (5xx)</small><b style="color:${err5 ? 'var(--err)' : 'var(--ok)'}">${money(err5)}</b></div>
+    <div class="kpi"><small>Latencia media</small><b>${lat.length ? (lat.reduce((a, b) => a + b, 0) / lat.length).toFixed(0) : 0} ms</b></div>`;
+  $('tiles').innerHTML = sv.map(s => {
+    const x = m(s), c = x.por_clase || {}, n = x.peticiones || 1;
+    const cls = s.estado === 'ok' ? 'ok' : s.estado === 'degradado' ? 'degradado' : 'caido';
+    return `<div class="tile ${cls}"><h3><span><i class="dot"></i>${esc(s.nombre)}</span><span class="tag ${cls === 'ok' ? 'ok' : 'off'}">${esc(s.estado)}</span></h3>
+      <div class="num"><span><b>${x.peticiones ?? '–'}</b>peticiones</span><span><b>${x.latencia_media_ms ?? '–'} ms</b>media</span><span><b>${x.latencia_p95_ms ?? '–'} ms</b>p95</span><span><b>${x.uptime_s != null ? dur(x.uptime_s) : '–'}</b>activo</span></div>
+      <div class="barra" title="2xx / 4xx / 5xx"><i style="width:${(c['2xx'] || 0) / n * 100}%;background:var(--ok)"></i><i style="width:${(c['4xx'] || 0) / n * 100}%;background:var(--warn)"></i><i style="width:${(c['5xx'] || 0) / n * 100}%;background:var(--err)"></i></div>
+      ${s.salud && s.salud.db ? `<div class="mute" style="font-size:.78rem;margin-top:6px">Base de datos: ${esc(s.salud.db)}</div>` : ''}</div>`;
+  }).join('');
+  const nt = sv.find(s => s.nombre === 'notificaciones'), mm = nt ? m(nt) : {};
+  const ok = mm.broker === 'conectado';
+  $('broker').innerHTML = nt ? `<p><span class="tag ${ok ? 'ok' : 'off'}">${esc(mm.broker || 'sin datos')}</span></p>
+    <p style="margin-top:10px">Mensajes en la cola de fallidos (DLQ): <b style="color:${mm.dlq ? 'var(--warn)' : 'var(--tx)'}">${mm.dlq ?? 0}</b></p>
+    <p style="margin-top:10px;font-size:.88rem">Pedidos y domicilios publican eventos; notificaciones los consume. Si RabbitMQ no responde, los eventos viajan por HTTP de respaldo y no se pierde ningún aviso.</p>` : 'Sin datos';
+  const rutas = sv.flatMap(s => (m(s).rutas_top || []).map(r => ({...r, srv: s.nombre}))).sort((a, b) => b.n - a.n).slice(0, 8);
+  $('rutas').innerHTML = rutas.map(r => `<tr><td><span class="tag">${esc(r.srv)}</span> ${esc(r.ruta)}</td><td>${r.n}</td><td>${r.ms_medio}</td><td>${r.errores ? `<span class="tag off">${r.errores}</span>` : 0}</td></tr>`).join('') || '<tr><td colspan="4" class="vacio">Sin tráfico todavía</td></tr>';
+  const logs = sv.flatMap(s => (m(s).logs_recientes || []).map(l => ({...l, srv: s.nombre}))).sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 25);
+  $('logs').innerHTML = logs.map(l => `<div class="log"><span class="mute">${esc(l.ts)}</span> <b class="${esc(l.nivel)}">${esc(l.nivel)}</b> [${esc(l.srv)}] <span class="mute">traza ${esc(l.rid)}</span><br>${esc(l.mensaje)}</div>`).join('') || '<p class="vacio">Sin avisos: todo marcha bien ✅</p>';
+}
+
+if (staff && staff.token && staff.rol === 'ADMIN') iniciar(); else $('login').classList.remove('hide');
+</script>
+</body>
+</html>
