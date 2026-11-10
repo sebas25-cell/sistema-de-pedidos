@@ -5,7 +5,9 @@
   const q = new URLSearchParams(location.search).get('api');
   const guardado = (() => { try { return localStorage.getItem('api'); } catch (e) { return null; } })();
   if (q) { try { localStorage.setItem('api', q); } catch (e) {} }
-  w.API = q || guardado || (['localhost', '127.0.0.1', ''].includes(location.hostname) ? 'http://localhost:8000' : location.protocol + '//' + location.hostname + ':8000');
+    // URL pública del gateway (backend) para cuando el frontend está en Vercel
+  const API_PUBLICA = 'https://thursday-railway-devel-kent.trycloudflare.com';
+  w.API = q || guardado || (['localhost', '127.0.0.1', ''].includes(location.hostname) ? 'http://localhost:8000' : API_PUBLICA);
 
   w.$ = id => document.getElementById(id);
   w.esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

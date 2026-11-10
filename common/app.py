@@ -54,7 +54,7 @@ def create_app(titulo, descripcion="", db=None, tags=None, lifespan=None, **kw):
     # Solo se aceptan navegadores abiertos desde localhost / 127.0.0.1 (cualquier puerto) o desde un archivo local
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|null)$",
+                allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|https://[a-z0-9-]+\.vercel\.app|null)$",
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["X-Request-ID"],
