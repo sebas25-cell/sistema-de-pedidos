@@ -16,13 +16,23 @@
   else if (q) guardar(limpiar(q));
 
   w.API = (q && q !== 'reset') ? limpiar(q) : (esLocal ? 'http://localhost:8000' : '');
+  // Dirección publicada en GitHub por iniciar_publico.bat ('' si no se pudo leer)
+  const publicada = () => fetch(TUNEL_JSON, {headers: {Accept: 'application/vnd.github.raw+json'}, cache: 'no-store'})
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(d => { const u = limpiar(d.api); return /^https:\/\//.test(u) ? u : ''; })
+    .catch(() => '');
   // apiLista: promesa que se resuelve cuando ya se conoce la dirección del servidor
   w.apiLista = w.API ? Promise.resolve(w.API) :
-    fetch(TUNEL_JSON, {headers: {Accept: 'application/vnd.github.raw+json'}, cache: 'no-store'})
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(d => { const u = limpiar(d.api); if (!/^https:\/\//.test(u)) throw 0; guardar(u); return u; })
-      .catch(() => (q === 'reset' ? '' : guardado) || '')
-      .then(u => (w.API = u));
+    publicada().then(u => { if (u) guardar(u); return (w.API = u || (q === 'reset' ? '' : guardado) || ''); });
+  // Si la dirección actual no responde (túnel viejo), se cambia a la publicada en GitHub
+  w.corregirApi = async function () {
+    if (esLocal) return false;
+    const u = await publicada();
+    if (!u || u === w.API) return false;
+    guardar(u); w.API = u; w.apiLista = Promise.resolve(u);
+    if (q) history.replaceState(null, '', location.pathname + location.hash);  // quita el ?api= viejo del enlace
+    return true;
+  };
 
   w.$ = id => document.getElementById(id);
   w.esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -55,8 +65,13 @@
       let r;
       await w.apiLista;
       if (!API) throw new Error('No se encontró la dirección del servidor. Ejecuta iniciar_publico.bat en el computador del servidor y recarga la página en 1 minuto.');
-      try { r = await fetch(API + ruta, {...opts, headers, body: opts.body ? JSON.stringify(opts.body) : undefined}); }
-      catch (e) { throw new Error('No hay conexión con el servidor (' + API + '). ¿Está corriendo el gateway?'); }
+      const pedir = () => fetch(API + ruta, {...opts, headers, body: opts.body ? JSON.stringify(opts.body) : undefined});
+      try { r = await pedir(); }
+      catch (e) {
+        let ok = false;
+        if (await w.corregirApi()) { try { r = await pedir(); ok = true; } catch (e2) {} }
+        if (!ok) throw new Error('No hay conexión con el servidor (' + API + '). ¿Está corriendo iniciar_publico.bat en el computador del servidor?');
+      }
       const d = await r.json().catch(() => ({}));
       if (r.status === 401 && s) { alSesionVencida(); throw new Error('Tu sesión venció, inicia sesión de nuevo'); }
       if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : (Array.isArray(d.detail) ? 'Revisa los datos del formulario' : 'Error ' + r.status));

@@ -33,4 +33,4 @@ Set-Clipboard $vercel
 Write-Host ''
 Write-Host 'Enlace para compartir (ya copiado al portapapeles):' $vercel
 Write-Host 'Enlace de respaldo (siempre funciona):' $l
-Start-Process $l
+Start-Process $vercel
