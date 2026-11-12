@@ -16,6 +16,26 @@
 3. `docker compose up --build -d` y espera ~1 minuto. Revisa `docker compose ps` (todos *healthy*).
 4. Abre <http://localhost:3000>. Para apagar: `docker compose down` (añade `-v` para borrar datos).
 
+### Opción C — Publicado: frontend en Vercel + backend en tu computador (túnel)
+El frontend (`frontend/`) está desplegado en Vercel y el backend corre en tu computador, expuesto con un túnel gratuito de Cloudflare.
+
+| Recurso | Enlace |
+|---|---|
+| Repositorio | <https://github.com/sebas25-cell/sistema-de-pedidos> |
+| Tienda en Vercel | <https://sistema-de-pedidos-frontend-flame.vercel.app> |
+
+
+Pasos:
+
+1. Requisitos: `instalar.bat` ejecutado una vez, XAMPP (Apache y MySQL) iniciado y `cloudflared` instalado.
+2. En la carpeta del proyecto: `.\iniciar_publico.bat`. Inicia los 8 servicios con el permiso CORS para Vercel, abre un **túnel nuevo**, y abre la tienda con un enlace del tipo
+   `https://sistema-de-pedidos-frontend-flame.vercel.app/index.html?api=https://<direccion-del-tunel>.trycloudflare.com`
+   (también lo copia al portapapeles para que lo envíes a otros dispositivos).
+3. Deja abiertas las ventanas de los servicios y la de **"Tunel Cloudflare"** mientras uses el sistema.
+
+Notas: la dirección del túnel cambia cada vez que se reinicia; el enlace con `?api=` se debe volver a abrir (el navegador la recuerda hasta el siguiente cambio; `?api=reset` la olvida).
+Si se publica en otro dominio, define `CORS_ORIGINS=https://tu-dominio` antes de iniciar. Un túnel gratuito no tiene garantía de disponibilidad.
+
 ### Verificar que todo funciona
 * <http://localhost:8000/estado> debe mostrar los 7 servicios en `true`.
 * `python probar.py` debe terminar con *0 con falla*.
@@ -26,6 +46,7 @@
 | "No se pudo conectar con MySQL" en `instalar.bat` | MySQL de XAMPP no está iniciado, o `root` tiene contraseña (`set DB_PASS=…`) |
 | La tienda muestra "No hay conexión con el servidor" | Falta `iniciar.bat` (gateway en el puerto 8000) |
 | Puerto ocupado | Cierra el programa que usa 8000–8007 o ejecuta `iniciar.bat` otra vez tras cerrar las ventanas viejas |
+| La tienda de Vercel dice "No hay conexión con el servidor" | El túnel se cerró o cambió de dirección: ejecuta `.\iniciar_publico.bat` y abre el enlace nuevo. Error 1033 de Cloudflare = `cloudflared` no está corriendo |
 | Avisos no llegan en modo Docker | Revisa <http://localhost:15672> y `docker compose logs notificaciones` |
 
 ## Manual de usuario

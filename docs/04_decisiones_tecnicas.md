@@ -17,6 +17,7 @@
 | 13 | **Docker Compose** (no Kubernetes) | K8s | Alcance del proyecto; un comando levanta todo | Sin autoescalado |
 | 14 | **Frontend estático sin framework** | React/Vue | Cero compilación, se sirve desde XAMPP o nginx | Menos estructura para crecer |
 | 15 | **Pagos simulados** | Pasarela real | El alcance es arquitectónico | No hay conciliación ni cobro real |
+| 16 | **Frontend en Vercel + backend local con Cloudflare Tunnel** (opcional) | Servidor en la nube | Permite demostrar el sistema desde cualquier dispositivo sin pagar infraestructura; CORS restringido por `CORS_ORIGINS` | El túnel gratuito cambia de dirección y no tiene garantía de disponibilidad; el computador debe quedar encendido |
 
 ## Mejoras futuras
 Refresh tokens y rotación de secretos, limitación de tasa en el gateway, Prometheus/Grafana, migraciones versionadas (Alembic), *outbox pattern* para publicar eventos dentro de la misma transacción del pedido, y CI con GitHub Actions.

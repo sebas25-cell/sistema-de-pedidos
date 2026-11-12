@@ -45,6 +45,23 @@ docker compose up --build -d
 | RabbitMQ (consola) | <http://localhost:15672> (usuario/clave de `.env`) |
 | phpMyAdmin (opcional) | `docker compose --profile tools up -d` → <http://localhost:8080> |
 
+### C) Publicado: frontend en Vercel + backend en tu computador (túnel)
+El frontend (`frontend/`) está desplegado en Vercel y el backend corre en tu computador, expuesto con un túnel gratuito de Cloudflare.
+
+| Recurso | Enlace |
+|---|---|
+| Repositorio | <https://github.com/sebas25-cell/sistema-de-pedidos> |
+| Tienda en Vercel | <https://sistema-de-pedidos-frontend-flame.vercel.app> |
+
+1. Requisitos: `instalar.bat` ejecutado una vez, XAMPP (Apache y MySQL) iniciado y `cloudflared` instalado.
+2. En la carpeta del proyecto: `.\iniciar_publico.bat`. Inicia los 8 servicios con el permiso CORS para Vercel, abre un **túnel nuevo**, y abre la tienda con un enlace del tipo
+   `https://sistema-de-pedidos-frontend-flame.vercel.app/index.html?api=https://<direccion-del-tunel>.trycloudflare.com`
+   (también lo copia al portapapeles para que lo envíes a otros dispositivos).
+3. Deja abiertas las ventanas de los servicios y la de **"Tunel Cloudflare"** mientras uses el sistema.
+
+Notas: la dirección del túnel cambia cada vez que se reinicia; el enlace con `?api=` se debe volver a abrir (el navegador la recuerda hasta el siguiente cambio; `?api=reset` la olvida).
+Si se publica en otro dominio, define `CORS_ORIGINS=https://tu-dominio` antes de iniciar. Un túnel gratuito no tiene garantía de disponibilidad.
+
 ### Cuentas de demostración
 | Rol | Correo | Contraseña |
 |---|---|---|

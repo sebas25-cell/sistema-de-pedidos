@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 
 import requests
@@ -52,9 +53,12 @@ def create_app(titulo, descripcion="", db=None, tags=None, lifespan=None, **kw):
         contact={"name": "Sistema de Pedidos para Restaurantes - Montería"},
     )
     # Solo se aceptan navegadores abiertos desde localhost / 127.0.0.1 (cualquier puerto) o desde un archivo local
+    # CORS_ORIGINS: orígenes extra separados por coma, p. ej. https://mi-tienda.vercel.app (para un frontend publicado)
+    extra = [o.strip().rstrip("/") for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware,
-                allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|https://[a-z0-9-]+\.vercel\.app|null)$",
+        allow_origins=extra,
+        allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|null)$",
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["X-Request-ID"],

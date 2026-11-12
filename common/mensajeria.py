@@ -22,7 +22,10 @@ import threading
 import time
 import uuid
 
-import pika
+try:
+    import pika
+except ImportError:      # sin la librería, el sistema sigue funcionando con el respaldo HTTP
+    pika = None
 
 from common import config, observabilidad
 from common.app import llamar
@@ -61,7 +64,7 @@ def publicar(tipo, datos):
     global _sin_broker_hasta
     evento = {"id": uuid.uuid4().hex, "tipo": tipo, "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
               "request_id": observabilidad.request_id_var.get(), "datos": datos}
-    if config.RABBITMQ_URL and time.time() >= _sin_broker_hasta:
+    if pika and config.RABBITMQ_URL and time.time() >= _sin_broker_hasta:
         try:
             with contextlib.closing(pika.BlockingConnection(_parametros())) as conexion:
                 canal = conexion.channel()
@@ -91,7 +94,7 @@ def iniciar_consumidor(procesar, estado):
     procesar lanza excepción  -> el mensaje va a la DLQ (no se pierde ni se reintenta en bucle).
     estado: diccionario que se mantiene actualizado ('broker': conectado|desconectado, 'dlq': n mensajes).
     """
-    if not config.RABBITMQ_URL:
+    if not config.RABBITMQ_URL or pika is None:
         estado["broker"] = "sin configurar (HTTP directo)"
         log.info("RABBITMQ_URL vacío: los eventos llegarán por HTTP en POST /eventos")
         return None
