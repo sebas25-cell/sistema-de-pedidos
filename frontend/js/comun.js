@@ -1,17 +1,28 @@
 /* Utilidades compartidas por index.html, admin.html y monitor.html */
 (function () {
   const w = window;
-  // La API siempre se consulta a través del gateway. Se fija con ?api=<dirección> y se recuerda en este navegador.
-  //   · En localhost/127.0.0.1 se usa http://localhost:8000 sin necesidad de nada.
-  //   · Frontend publicado (p. ej. Vercel): abrir UNA vez el enlace con ?api=https://<tu-tunel>.trycloudflare.com
-  //   · ?api=reset olvida la dirección guardada (útil cuando el túnel cambió).
+  // La API siempre se consulta a través del gateway. Orden para decidir la dirección:
+  //   1. ?api=<dirección> en el enlace (se recuerda en este navegador; ?api=reset la olvida).
+  //   2. En localhost/127.0.0.1: http://localhost:8000.
+  //   3. Frontend publicado (Vercel): la dirección del túnel que iniciar_publico.bat sube a GitHub (tunel.json).
+  //   4. Si GitHub no responde: la última dirección guardada en este navegador.
+  const TUNEL_JSON = 'https://api.github.com/repos/sebas25-cell/sistema-de-pedidos/contents/tunel.json?ref=main';
+  const limpiar = u => String(u || '').trim().replace(/\/+$/, '');
   const q = new URLSearchParams(location.search).get('api');
   const esLocal = ['localhost', '127.0.0.1', ''].includes(location.hostname);
+  const guardar = v => { try { v ? localStorage.setItem('api', v) : localStorage.removeItem('api'); } catch (e) {} };
   const guardado = (() => { try { return localStorage.getItem('api'); } catch (e) { return null; } })();
-  if (q === 'reset') { try { localStorage.removeItem('api'); } catch (e) {} }
-  else if (q) { try { localStorage.setItem('api', q.replace(/\/+$/, '')); } catch (e) {} }
-  w.API = (q && q !== 'reset') ? q.replace(/\/+$/, '') : (q === 'reset' ? '' : guardado) || (esLocal ? 'http://localhost:8000' : '');
-  if (esLocal && q === 'reset') w.API = 'http://localhost:8000';
+  if (q === 'reset') guardar(null);
+  else if (q) guardar(limpiar(q));
+
+  w.API = (q && q !== 'reset') ? limpiar(q) : (esLocal ? 'http://localhost:8000' : '');
+  // apiLista: promesa que se resuelve cuando ya se conoce la dirección del servidor
+  w.apiLista = w.API ? Promise.resolve(w.API) :
+    fetch(TUNEL_JSON, {headers: {Accept: 'application/vnd.github.raw+json'}, cache: 'no-store'})
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => { const u = limpiar(d.api); if (!/^https:\/\//.test(u)) throw 0; guardar(u); return u; })
+      .catch(() => (q === 'reset' ? '' : guardado) || '')
+      .then(u => (w.API = u));
 
   w.$ = id => document.getElementById(id);
   w.esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -42,7 +53,8 @@
       const s = obtenerSesion();
       if (s && s.token) headers.Authorization = 'Bearer ' + s.token;
       let r;
-      if (!API) throw new Error('Falta la dirección del servidor. Abre el enlace completo que termina en ?api=https://… (lo entrega iniciar_publico.bat).');
+      await w.apiLista;
+      if (!API) throw new Error('No se encontró la dirección del servidor. Ejecuta iniciar_publico.bat en el computador del servidor y recarga la página en 1 minuto.');
       try { r = await fetch(API + ruta, {...opts, headers, body: opts.body ? JSON.stringify(opts.body) : undefined}); }
       catch (e) { throw new Error('No hay conexión con el servidor (' + API + '). ¿Está corriendo el gateway?'); }
       const d = await r.json().catch(() => ({}));

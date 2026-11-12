@@ -65,7 +65,7 @@
 <script>
 let staff = load('staff'), timer = null;
 const j = crearApi(() => staff, () => salir());
-$('lnkDocs').href = API + '/docs';
+apiLista.then(u => $('lnkDocs').href = u + '/docs');
 
 async function entrar() {
   try {

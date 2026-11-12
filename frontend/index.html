@@ -210,7 +210,7 @@ function entrar() {
   $('auth').classList.add('hide'); $('app').classList.remove('hide');
   ['buscarWrap', 'campanaWrap', 'btnCarrito'].forEach(i => $(i).classList.remove('hide'));
   $('sesion').innerHTML = `<span class="pill">👋 ${esc(user.nombre)} <button onclick="salir()" style="color:var(--acc);text-decoration:underline">Salir</button></span>`;
-  $('apiUrl').textContent = API;
+  apiLista.then(u => $('apiUrl').textContent = u);
   pedidoId = load('pedido');
   pintarRail(null);
   cargarRestaurantes(); cargarNotifs(); refrescarPedido(); cargarMisPedidos();

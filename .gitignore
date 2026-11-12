@@ -4,3 +4,4 @@ logs/
 .env
 *.zip
 .pytest_cache/
+cf.log

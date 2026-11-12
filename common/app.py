@@ -58,7 +58,8 @@ def create_app(titulo, descripcion="", db=None, tags=None, lifespan=None, **kw):
     app.add_middleware(
         CORSMiddleware,
         allow_origins=extra,
-        allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|null)$",
+        # Además de localhost, se aceptan las direcciones de Vercel de este proyecto (producción y vistas previas)
+        allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|https://sistema-de-pedidos[a-z0-9-]*\.vercel\.app|null)$",
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["X-Request-ID"],
